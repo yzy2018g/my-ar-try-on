@@ -1,5 +1,30 @@
-<div style="position: relative;">
-  <video id="webcam" style="position: absolute; left: 0; top: 0;" autoplay playsinline></video>
-  <canvas id="output_canvas" style="position: absolute; left: 0; top: 0;"></canvas>
-</div>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>我的手機 AR 特效</title>
+  <!-- 引入 A-Frame 與 AR.js 人臉偵測庫 -->
+  <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.1.4/dist/mindar-face-aframe.prod.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <!-- 設定人臉偵測場景 -->
+  <a-scene mindar-face embedded color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+    <a-assets>
+      <!-- 這是你剛上傳的圖片，請確保檔名完全正確 -->
+      <img id="myEffect" src="images (4).jpeg">
+    </a-assets>
 
+    <a-camera active="false" position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <!-- 偵測到人臉後的特效位置 -->
+    <a-entity mindar-face-target="anchorIndex: 10"> <!-- 10 是額頭位置 -->
+      <!-- 將圖片放置在人臉上，可以調整 position, scale, rotation -->
+      <a-image src="#myEffect" position="0 0.5 0" scale="0.5 0.5 0.5"></a-image>
+    </a-entity>
+  </a-scene>
+</body>
+</html>
