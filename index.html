@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>AI 智能試衣鏡</title>
   
   <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
@@ -11,34 +12,42 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   
   <style>
-    body { margin: 0; padding: 0; overflow: hidden; background-color: #000000; }
+    body { margin: 0; padding: 0; overflow: hidden; background-color: #000000; font-family: sans-serif; }
     .ui-layer { z-index: 999; position: absolute; }
+    /* 隱藏滾動條但保持滾動功能 */
+    .scrollbar-none::-webkit-scrollbar { display: none; }
+    .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
 <body>
 
-  <div id="app" class="relative w-screen h-screen">
+  <div id="app" class="relative w-screen h-screen select-none">
     
-    <div class="ui-layer top-4 left-4 bg-black/70 p-2 rounded text-xs text-green-400">
-      系統狀態: {{ statusMessage }} <br>
-      當前衣服: {{ currentCloth.name }}
+    <div class="ui-layer top-4 left-4 bg-black/70 backdrop-blur-md p-3 rounded-xl text-xs text-green-400 border border-white/10 shadow-lg">
+      <div class="flex items-center space-x-2">
+        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+        <span class="font-mono font-bold">{{ statusMessage }}</span>
+      </div>
+      <div class="mt-1 text-gray-400">當前款式: <span class="text-white font-semibold">{{ currentCloth.name }}</span></div>
     </div>
 
     <video id="input_video" style="display:none;" autoplay playsinline></video>
     <canvas id="output_canvas" class="w-full h-full object-cover"></canvas>
 
-    <div class="ui-layer bottom-24 left-0 right-0 px-4">
-      <div class="flex space-x-3 overflow-x-auto pb-2 justify-center">
+    <div class="ui-layer bottom-20 left-0 right-0 px-4">
+      <div class="flex space-x-4 overflow-x-auto pb-4 justify-center scrollbar-none">
         
         <div 
           v-for="(cloth, index) in clothesList" 
           :key="index"
           @click="selectCloth(cloth)"
-          :class="['p-2 rounded-lg border-2 bg-black/80 cursor-pointer transition w-20 flex-shrink-0 text-center', 
-                   currentCloth.id === cloth.id ? 'border-amber-500 scale-105' : 'border-gray-600']"
+          :class="['p-3 rounded-xl border-2 bg-black/80 backdrop-blur-md cursor-pointer transition-all duration-300 w-24 flex-shrink-0 text-center shadow-2xl', 
+                   currentCloth.id === cloth.id ? 'border-amber-500 scale-105 bg-gray-900/90' : 'border-gray-700/70']"
         >
-          <img :src="cloth.src" class="w-10 h-10 object-contain mx-auto rounded">
-          <p class="text-[10px] mt-1 truncate font-bold text-white">{{ cloth.name }}</p>
+          <div class="w-16 h-16 mx-auto bg-white/10 rounded-lg flex items-center justify-center p-1.5 shadow-inner">
+            <img :src="cloth.src" class="w-full h-full object-contain rounded">
+          </div>
+          <p class="text-xs mt-2 truncate font-bold text-white tracking-wide">{{ cloth.name }}</p>
         </div>
 
       </div>
@@ -46,11 +55,13 @@
   </div>
 
   <script>
+    // 啟動 Vue 專案管理
     new Vue({
       el: '#app',
       data: {
-        statusMessage: '正在初始化...',
+        statusMessage: '系統載入中...',
         currentCloth: { id: 1, name: '原創服飾', src: 'cloth.png', scale: 1.8, offset: 0.25 },
+        // 衣服資料庫：未來可透過 JSON 檔案或爬蟲 API 擴充
         clothesList: [
           { id: 1, name: '原創服飾', src: 'cloth.png', scale: 1.8, offset: 0.25 },
           { id: 2, name: '測試服 2', src: 'cloth.png', scale: 2.2, offset: 0.15 },
@@ -58,20 +69,23 @@
         ]
       },
       mounted() {
-        this.statusMessage = 'Vue 載入成功，正在啟動相機...';
+        this.statusMessage = 'Vue 初始化完畢，啟動鏡頭中...';
         this.initAR();
       },
       methods: {
+        // 切換選單衣服的點擊事件
         selectCloth(cloth) {
           this.currentCloth = cloth;
-          window.clothImage.src = cloth.src;
-          this.statusMessage = '已切換至: ' + cloth.name;
+          window.clothImage.src = cloth.src; // 即時更換 Canvas 繪製的圖片源
+          this.statusMessage = '已換裝: ' + cloth.name;
         },
+        // 核心 AR 與 AI 辨識邏輯
         initAR() {
           const videoElement = document.getElementById('input_video');
           const canvasElement = document.getElementById('output_canvas');
           const canvasCtx = canvasElement.getContext('2d');
 
+          // 初始化衣服圖片物件
           window.clothImage = new Image();
           window.clothImage.src = this.currentCloth.src;
           let isImgLoaded = false;
@@ -79,36 +93,46 @@
 
           const self = this;
 
+          // AI 辨識每幀畫面的回傳結果
           function onResults(results) {
-            self.statusMessage = 'AI 辨識運作中...';
+            self.statusMessage = 'AI 試衣鏡運作中';
             if (!results.poseLandmarks) return;
 
+            // 讓畫布尺寸與相機輸入同步
             canvasElement.width = videoElement.videoWidth;
             canvasElement.height = videoElement.videoHeight;
+            
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            // 1. 繪製底部鏡頭影像
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
+            // 2. 如果衣服圖片載入成功，開始計算人體位置並疊加
             if (isImgLoaded) {
               const lm = results.poseLandmarks;
-              const leftShoulder = lm[11];
-              const rightShoulder = lm[12];
+              const leftShoulder = lm[11];  // 左肩特徵點
+              const rightShoulder = lm[12]; // 右肩特徵點
 
+              // 向量幾何公式：計算兩肩在螢幕上的實際像素寬度
               const shoulderWidth = Math.sqrt(
                 Math.pow((leftShoulder.x - rightShoulder.x) * canvasElement.width, 2) +
                 Math.pow((leftShoulder.y - rightShoulder.y) * canvasElement.height, 2)
               );
 
-              // 這裡會動態抓取你點選的衣服設定
+              // 讀取當前點選服飾的縮放比與位移參數
               const scaleFactor = self.currentCloth.scale;
               const offsetFactor = self.currentCloth.offset;
 
+              // 計算胸口中心點座標
               const centerX = ((leftShoulder.x + rightShoulder.x) / 2) * canvasElement.width;
               const centerY = ((leftShoulder.y + rightShoulder.y) / 2 + offsetFactor) * canvasElement.height;
 
+              // 依肩膀寬度動態決定衣服大小
               const clothWidth = shoulderWidth * scaleFactor;
               const clothHeight = clothWidth * (window.clothImage.height / window.clothImage.width);
 
+              // 移動畫布原點至胸口，處理旋轉
               canvasCtx.translate(centerX, centerY);
               const angle = Math.atan2(
                 (leftShoulder.y - rightShoulder.y) * canvasElement.height,
@@ -116,22 +140,43 @@
               );
               canvasCtx.rotate(angle);
 
+              // 繪製衣服 (置中對齊)
               canvasCtx.drawImage(window.clothImage, -clothWidth / 2, -clothHeight * 0.1, clothWidth, clothHeight);
             }
             canvasCtx.restore();
           }
 
+          // 設定 MediaPipe Pose 參數
           const pose = new Pose({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
           });
-          pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+          
+          pose.setOptions({ 
+            modelComplexity: 0, // 0 適合手機順暢運行
+            smoothLandmarks: true, 
+            minDetectionConfidence: 0.5, 
+            minTrackingConfidence: 0.5 
+          });
           pose.onResults(onResults);
 
+          // 啟動手機相機追蹤
           const camera = new Camera(videoElement, {
             onFrame: async () => { await pose.send({image: videoElement}); },
-            width: 1280, height: 720
+            width: 1280, 
+            height: 720
           });
           
+          camera.start().then(() => {
+            self.statusMessage = '設備已就緒，請對準雙肩';
+          }).catch(err => {
+            self.statusMessage = '鏡頭啟動失敗: ' + err;
+          });
+        }
+      }
+    });
+  </script>
+</body>
+</html>
           camera.start().then(() => {
             self.statusMessage = '相機已啟動，請後退讓相機拍到雙肩';
           }).catch(err => {
