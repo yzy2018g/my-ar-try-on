@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>AI 智能試衣鏡 - 穩定版</title>
+  <title>AI 智能試衣鏡</title>
   
   <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -12,7 +12,6 @@
   
   <style>
     body { margin: 0; padding: 0; overflow: hidden; background-color: #000000; }
-    /* 讓選單永遠浮在最上層 */
     .ui-layer { z-index: 999; position: absolute; }
   </style>
 </head>
@@ -28,18 +27,18 @@
     <video id="input_video" style="display:none;" autoplay playsinline></video>
     <canvas id="output_canvas" class="w-full h-full object-cover"></canvas>
 
-    <div class="ui-layer bottom-10 left-0 right-0 px-4">
-      <div class="flex space-x-4 overflow-x-auto pb-2 justify-center">
+    <div class="ui-layer bottom-24 left-0 right-0 px-4">
+      <div class="flex space-x-3 overflow-x-auto pb-2 justify-center">
         
         <div 
           v-for="(cloth, index) in clothesList" 
           :key="index"
           @click="selectCloth(cloth)"
-          :class="['p-2 rounded-lg border-2 bg-gray-900/90 cursor-pointer transition w-20 flex-shrink-0', 
-                   currentCloth.id === cloth.id ? 'border-amber-500 scale-105' : 'border-gray-700']"
+          :class="['p-2 rounded-lg border-2 bg-black/80 cursor-pointer transition w-20 flex-shrink-0 text-center', 
+                   currentCloth.id === cloth.id ? 'border-amber-500 scale-105' : 'border-gray-600']"
         >
-          <img :src="cloth.src" class="w-12 h-12 object-contain mx-auto rounded">
-          <p class="text-[10px] text-center mt-1 truncate font-bold text-white">{{ cloth.name }}</p>
+          <img :src="cloth.src" class="w-10 h-10 object-contain mx-auto rounded">
+          <p class="text-[10px] mt-1 truncate font-bold text-white">{{ cloth.name }}</p>
         </div>
 
       </div>
@@ -47,7 +46,6 @@
   </div>
 
   <script>
-    // 使用傳統 Vue 2 語法，確保萬無一失
     new Vue({
       el: '#app',
       data: {
@@ -56,7 +54,7 @@
         clothesList: [
           { id: 1, name: '原創服飾', src: 'cloth.png', scale: 1.8, offset: 0.25 },
           { id: 2, name: '測試服 2', src: 'cloth.png', scale: 2.2, offset: 0.15 },
-          { id: 3, name: '測試服 3', src: 'cloth.png', scale: 1.5, offset: 0.3 }
+          { id: 3, name: '測試服 3', src: 'cloth.png', scale: 1.4, offset: 0.35 }
         ]
       },
       mounted() {
@@ -74,7 +72,6 @@
           const canvasElement = document.getElementById('output_canvas');
           const canvasCtx = canvasElement.getContext('2d');
 
-          // 載入圖片
           window.clothImage = new Image();
           window.clothImage.src = this.currentCloth.src;
           let isImgLoaded = false;
@@ -102,6 +99,50 @@
                 Math.pow((leftShoulder.y - rightShoulder.y) * canvasElement.height, 2)
               );
 
+              // 這裡會動態抓取你點選的衣服設定
+              const scaleFactor = self.currentCloth.scale;
+              const offsetFactor = self.currentCloth.offset;
+
+              const centerX = ((leftShoulder.x + rightShoulder.x) / 2) * canvasElement.width;
+              const centerY = ((leftShoulder.y + rightShoulder.y) / 2 + offsetFactor) * canvasElement.height;
+
+              const clothWidth = shoulderWidth * scaleFactor;
+              const clothHeight = clothWidth * (window.clothImage.height / window.clothImage.width);
+
+              canvasCtx.translate(centerX, centerY);
+              const angle = Math.atan2(
+                (leftShoulder.y - rightShoulder.y) * canvasElement.height,
+                (leftShoulder.x - rightShoulder.x) * canvasElement.width
+              );
+              canvasCtx.rotate(angle);
+
+              canvasCtx.drawImage(window.clothImage, -clothWidth / 2, -clothHeight * 0.1, clothWidth, clothHeight);
+            }
+            canvasCtx.restore();
+          }
+
+          const pose = new Pose({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+          });
+          pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+          pose.onResults(onResults);
+
+          const camera = new Camera(videoElement, {
+            onFrame: async () => { await pose.send({image: videoElement}); },
+            width: 1280, height: 720
+          });
+          
+          camera.start().then(() => {
+            self.statusMessage = '相機已啟動，請後退讓相機拍到雙肩';
+          }).catch(err => {
+            self.statusMessage = '相機啟動失敗: ' + err;
+          });
+        }
+      }
+    });
+  </script>
+</body>
+</html>
               // 讀取當前選擇衣服的參數
               const scaleFactor = self.currentCloth.scale;
               const offsetFactor = self.currentCloth.offset;
