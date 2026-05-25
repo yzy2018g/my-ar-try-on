@@ -2,107 +2,124 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>手機虛擬試衣鏡</title>
-  <!-- 引入 MediaPipe Pose 所需的 JS 庫 -->
+  <title>AI 智能試衣鏡 - 開發版</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <style>
-    body { margin: 0; padding: 0; overflow: hidden; background: black; }
-    #input_video { display: none; } /* 隱藏原始相機畫面 */
-    #output_canvas { width: 100vw; height: 100vh; object-fit: cover; } /* 顯示特效後的畫面 */
-  </style>
 </head>
-<body>
-  <video id="input_video" autoplay playsinline></video>
-  <canvas id="output_canvas"></canvas>
+<body class="bg-black text-white m-0 p-0 overflow-hidden">
+
+  <div id="app" class="relative w-screen h-screen">
+    <video id="input_video" class="hidden" autoplay playsinline></video>
+    <canvas id="output_canvas" class="w-full h-full object-cover"></canvas>
+
+    <div class="absolute bottom-6 left-0 right-0 px-4 z-10">
+      <div class="flex space-x-4 overflow-x-auto pb-2 justify-center">
+        <div 
+          v-for="(cloth, index) in clothesList" 
+          :key="index"
+          @click="selectCloth(cloth)"
+          :class="['p-2 rounded-lg border-2 bg-gray-900/80 cursor-pointer transition w-20', 
+                   currentCloth.id === cloth.id ? 'border-amber-500 scale-105' : 'border-transparent']"
+        >
+          <img :src="cloth.src" class="w-16 h-16 object-contain rounded mx-auto">
+          <p class="text-[10px] text-center mt-1 truncate font-semibold">{{ cloth.name }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script type="module">
-    const videoElement = document.getElementById('input_video');
-    const canvasElement = document.getElementById('output_canvas');
-    const canvasCtx = canvasElement.getContext('2d');
+    const { createApp, ref, onMounted } = Vue;
 
-    // 1. 載入你的衣服圖片
-    const clothImage = new Image();
-    clothImage.src = 'cloth.png'; // !!! 請確認 GitHub 上有這個 PNG 檔 !!!
-    let isImgLoaded = false;
-    clothImage.onload = () => { isImgLoaded = true; };
+    createApp({
+      setup() {
+        // 衣服清單（請確保你 GitHub 裡有對應的圖片檔，沒有的話可以先用同一張圖測試）
+        const clothesList = ref([
+          { id: 1, name: '原創服飾', src: 'cloth.png', scale: 1.8, offset: 0.25 },
+          { id: 2, name: '測試衣服 2', src: 'cloth.png', scale: 2.0, offset: 0.2 },
+          { id: 3, name: '測試衣服 3', src: 'cloth.png', scale: 1.5, offset: 0.3 }
+        ]);
 
-    // 2. 處理辨識結果的函數
-    function onResults(results) {
-      if (!results.poseLandmarks) return;
+        const currentCloth = ref(clothesList.value[0]);
+        const clothImage = new Image();
+        clothImage.src = currentCloth.value.src;
+        let isImgLoaded = false;
+        clothImage.onload = () => { isImgLoaded = true; };
 
-      // 設定 Canvas 大小與相機一致
-      canvasElement.width = videoElement.videoWidth;
-      canvasElement.height = videoElement.videoHeight;
+        // 切換衣服
+        const selectCloth = (cloth) => {
+          currentCloth.value = cloth;
+          isImgLoaded = false;
+          clothImage.src = cloth.src; // 切換圖片路徑
+        };
 
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      
-      // 繪制相機原始畫面
-      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+        // 原本的 MediaPipe 偵測邏輯
+        onMounted(() => {
+          const videoElement = document.getElementById('input_video');
+          const canvasElement = document.getElementById('output_canvas');
+          const canvasCtx = canvasElement.getContext('2d');
 
-      if (isImgLoaded) {
-        // --- 特效核心邏輯：計算衣服位置 ---
-        
-        // 取得關鍵點 (MediaPipe Pose Landmarks)
-        // 11: 左肩, 12: 右肩, 23: 左髖, 24: 右髖
-        const lm = results.poseLandmarks;
-        const leftShoulder = lm[11];
-        const rightShoulder = lm[12];
+          function onResults(results) {
+            if (!results.poseLandmarks) return;
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-        // 計算肩膀寬度 (用於決定衣服大小)
-        const shoulderWidth = Math.sqrt(
-          Math.pow((leftShoulder.x - rightShoulder.x) * canvasElement.width, 2) +
-          Math.pow((leftShoulder.y - rightShoulder.y) * canvasElement.height, 2)
-        );
+            if (isImgLoaded) {
+              const lm = results.poseLandmarks;
+              const leftShoulder = lm[11];
+              const rightShoulder = lm[12];
 
-        // 計算中心點 (兩肩中間，稍稍往下，靠近胸口)
-        const centerX = ((leftShoulder.x + rightShoulder.x) / 2) * canvasElement.width;
-        const centerY = ((leftShoulder.y + rightShoulder.y) / 2 + 0.1) * canvasElement.height; // +0.1 是修正量，讓衣服往下移
+              const shoulderWidth = Math.sqrt(
+                Math.pow((leftShoulder.x - rightShoulder.x) * canvasElement.width, 2) +
+                Math.pow((leftShoulder.y - rightShoulder.y) * canvasElement.height, 2)
+              );
 
-        // 設定衣服繪製的大小 (肩膀寬度的 1.5 倍，可依圖片調整)
-        const clothWidth = shoulderWidth * 1.8;
-        const clothHeight = clothWidth * (clothImage.height / clothImage.width); // 保持圖片比例
+              // 動態讀取當前衣服的微調參數 (scale 與 offset)
+              const scaleFactor = currentCloth.value.scale;
+              const offsetFactor = currentCloth.value.offset;
 
-        // --- 繪製衣服 ---
-        canvasCtx.translate(centerX, centerY);
-        
-        // 計算旋轉角度 (根據肩膀傾斜度)
-        const angle = Math.atan2(
-          (leftShoulder.y - rightShoulder.y) * canvasElement.height,
-          (leftShoulder.x - rightShoulder.x) * canvasElement.width
-        );
-        canvasCtx.rotate(angle);
+              const centerX = ((leftShoulder.x + rightShoulder.x) / 2) * canvasElement.width;
+              const centerY = ((leftShoulder.y + rightShoulder.y) / 2 + offsetFactor) * canvasElement.height;
 
-        // 繪製圖片 (置中)
-        canvasCtx.drawImage(
-          clothImage,
-          -clothWidth / 2, // 左右置中
-          -clothHeight * 0.1, // 上下位置修正，0.1 靠近頸部
-          clothWidth,
-          clothHeight
-        );
+              const clothWidth = shoulderWidth * scaleFactor;
+              const clothHeight = clothWidth * (clothImage.height / clothImage.width);
+
+              canvasCtx.translate(centerX, centerY);
+              const angle = Math.atan2(
+                (leftShoulder.y - rightShoulder.y) * canvasElement.height,
+                (leftShoulder.x - rightShoulder.x) * canvasElement.width
+              );
+              canvasCtx.rotate(angle);
+
+              canvasCtx.drawImage(clothImage, -clothWidth / 2, -clothHeight * 0.1, clothWidth, clothHeight);
+            }
+            canvasCtx.restore();
+          }
+
+          const pose = new Pose({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+          });
+          pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+          pose.onResults(onResults);
+
+          const camera = new Camera(videoElement, {
+            onFrame: async () => { await pose.send({image: videoElement}); },
+            width: 1280, height: 720
+          });
+          camera.start();
+        });
+
+        return { clothesList, currentCloth, selectCloth };
       }
-      canvasCtx.restore();
-    }
-
-    // 3. 初始化 MediaPipe Pose 引擎
-    const pose = new Pose({
-      locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-      }
-    });
-
-    pose.setOptions({
-      modelComplexity: 1, // 0: 速度快, 1: 平衡, 2: 準確但慢 (手機建議用 1)
-      smoothLandmarks: true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
-    
-    pose.onResults(onResults);
-
-    // 4. 啟動相機
+    }).mount('#app');
+  </script>
+</body>
+</html>
     const camera = new Camera(videoElement, {
       onFrame: async () => {
         await pose.send({image: videoElement});
