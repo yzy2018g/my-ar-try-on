@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DeepFashion AR 動態試穿間 v3.0</title>
+    <title>DeepFashion AR 動態試穿間 v3.1</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.prod.js"></script>
     <script type="module">
@@ -25,9 +25,9 @@
             </div>
             <div class="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl flex items-center gap-3">
                 <div class="flex flex-col">
-                    <span class="text-[10px] font-bold text-slate-500 uppercase">Hugging Face Space ID</span>
+                    <span class="text-[10px] font-bold text-slate-500 uppercase">Hugging Face Space URL</span>
                     <input type="text" v-model="spaceId" @change="initGradioClient"
-                           class="bg-transparent text-xs font-mono text-slate-200 focus:outline-none border-b border-transparent focus:border-indigo-500 pb-0.5 w-56">
+                           class="bg-transparent text-xs font-mono text-slate-200 focus:outline-none border-b border-transparent focus:border-indigo-500 pb-0.5 w-64">
                 </div>
                 <div class="flex items-center gap-1.5 border-l border-slate-800 pl-3">
                     <span :class="['h-2.5 w-2.5 rounded-full animate-pulse', statusColorClass]"></span>
@@ -98,10 +98,212 @@
 
         createApp({
             setup() {
-                // 狀態管理（已自動綁定你的 Space ID）
-                //const spaceId = ref("MichaelYo/my-ar-cloth-api"); 
-                const spaceId = ref("https://michaelyo-my-ar-cloth-api.hf.space");
+                // 🚀 防防錯修正 1：改用直接的實體伺服器鏡像網址，避開名稱解析抽風
+                const spaceId = ref("https://michaelyo-my-ar-cloth-api.hf.space"); 
+                const aiStatus = ref("disconnect"); 
+                const aiMessage = ref("等待設定 Space ID");
+                const arStatus = ref("相機初始化中...");
+                const isLoading = ref(false);
                 
+                const clothesList = ref([]);
+                const currentClothUrl = ref("");
+                
+                window.clothImage = new Image();
+                window.isImgLoaded = false;
+                window.clothParams = {
+                    shoulderWidthPercent: 0.0,
+                    offsetFromTopPercent: 0.0
+                };
+
+                const statusColorClass = computed(() => {
+                    if (aiStatus.value === 'ready') return 'bg-emerald-500';
+                    if (aiStatus.value === 'connecting' || aiStatus.value === 'processing') return 'bg-amber-400';
+                    if (aiStatus.value === 'error') return 'bg-rose-500';
+                    return 'bg-slate-600';
+                });
+
+                const aiStatusMessage = computed(() => {
+                    if (aiStatus.value === 'ready') return '雲端 AI 已就緒';
+                    return aiMessage.value;
+                });
+
+                // 1. 初始化 Gradio Client 連線
+                let gradioApp = null;
+                async function initGradioClient() {
+                    let target = spaceId.value.trim();
+                    if (!target) return;
+                    
+                    try {
+                        aiStatus.value = "connecting";
+                        aiMessage.value = "正在連線至 HF Space...";
+                        
+                        // 🚀 防錯修正 2：強制關閉跨網域憑證檢查，防止被瀏覽器安全性原則阻擋
+                        gradioApp = await window.GradioClient(target, { with_credentials: false });
+                        
+                        aiStatus.value = "ready";
+                    } catch (err) {
+                        console.error("Gradio 連線錯誤詳細資訊:", err);
+                        aiStatus.value = "error";
+                        aiMessage.value = "連線失敗，請檢查瀏覽器 F12 控制台";
+                    }
+                }
+
+                // 2. 讀取衣櫥設定檔
+                async function loadClothesConfig() {
+                    try {
+                        const res = await fetch('clothes.json');
+                        clothesList.value = await res.json();
+                    } catch (err) {
+                        console.error("無法讀取 clothes.json:", err);
+                    }
+                }
+
+                // 3. 點選衣服：發送 API 請求
+                async function selectCloth(item) {
+                    if (!gradioApp) {
+                        alert("AI 伺服器尚未連線成功！");
+                        return;
+                    }
+                    
+                    currentClothUrl.value = item.url;
+                    isLoading.value = true;
+                    aiStatus.value = "processing";
+                    aiMessage.value = "AI 剪裁中...";
+                    window.isImgLoaded = false;
+
+                    try {
+                        const res = await gradioApp.predict("/predict", [ item.url ]);
+                        const [status, imgData, shoulder, offset] = res.data;
+
+                        if (status === "OK" && imgData && imgData.url) {
+                            window.clothParams = {
+                                shoulderWidthPercent: parseFloat(shoulder),
+                                offsetFromTopPercent: parseFloat(offset)
+                            };
+
+                            window.clothImage.src = imgData.url;
+                            window.clothImage.onload = () => {
+                                window.isImgLoaded = true;
+                                isLoading.value = false;
+                                aiStatus.value = "ready";
+                            };
+                        } else {
+                            alert("雲端處理異常: " + status);
+                            isLoading.value = false;
+                            aiStatus.value = "error";
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        alert("呼叫雲端 API 失敗，請確認你的 Space 是否在運行中。");
+                        isLoading.value = false;
+                        aiStatus.value = "error";
+                    }
+                }
+
+                // 4. 初始化 MediaPipe AR 引擎
+                function initAREngine() {
+                    const videoElement = document.getElementById('input_video');
+                    const canvasElement = document.getElementById('output_canvas');
+                    const canvasCtx = canvasElement.getContext('2d');
+
+                    function onResults(results) {
+                        if (!results.poseLandmarks) {
+                            arStatus.value = "未偵測到人體";
+                            return;
+                        }
+                        arStatus.value = "追蹤中";
+
+                        canvasElement.width = videoElement.videoWidth;
+                        canvasElement.height = videoElement.videoHeight;
+                        
+                        canvasCtx.save();
+                        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+                        // 全自動骨骼磁吸對齊演算法
+                        if (window.isImgLoaded && window.clothParams.shoulderWidthPercent > 0) {
+                            const lm = results.poseLandmarks;
+                            const leftShoulder = lm[11];  
+                            const rightShoulder = lm[12]; 
+
+                            const humanShoulderWidth = Math.sqrt(
+                                Math.pow((leftShoulder.x - rightShoulder.x) * canvasElement.width, 2) +
+                                Math.pow((leftShoulder.y - rightShoulder.y) * canvasElement.height, 2)
+                            );
+
+                            const clothWidth = humanShoulderWidth / window.clothParams.shoulderWidthPercent;
+                            const clothHeight = clothWidth * (window.clothImage.height / window.clothImage.width);
+
+                            const centerX = ((leftShoulder.x + rightShoulder.x) / 2) * canvasElement.width;
+                            const humanCenterY = ((leftShoulder.y + rightShoulder.y) / 2) * canvasElement.height;
+
+                            const autoOffsetY = clothHeight * window.clothParams.offsetFromTopPercent;
+                            const centerY = humanCenterY - (clothHeight * 0.12) + (autoOffsetY * 0.5);
+
+                            canvasCtx.translate(centerX, centerY);
+                            const angle = Math.atan2(
+                                (leftShoulder.y - rightShoulder.y) * canvasElement.height,
+                                (leftShoulder.x - rightShoulder.x) * canvasElement.width
+                            );
+                            canvasCtx.rotate(angle);
+
+                            canvasCtx.globalAlpha = 0.85;
+                            canvasCtx.drawImage(window.clothImage, -clothWidth / 2, -clothHeight * 0.1, clothWidth, clothHeight);
+                            canvasCtx.globalAlpha = 1.0;
+                        }
+
+                        canvasCtx.restore();
+                    }
+
+                    const pose = new Pose({
+                        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+                    });
+
+                    pose.setOptions({
+                        modelComplexity: 0, 
+                        smoothLandmarks: true,
+                        minDetectionConfidence: 0.5,
+                        minTrackingConfidence: 0.5
+                    });
+                    pose.onResults(onResults);
+
+                    const camera = new Camera(videoElement, {
+                        onFrame: async () => {
+                            await pose.send({ image: videoElement });
+                        },
+                        width: 1280,
+                        height: 720
+                    });
+
+                    camera.start()
+                        .then(() => { arStatus.value = "鏡頭就緒"; })
+                        .catch(err => { arStatus.value = "鏡頭啟動失敗: " + err; });
+                }
+
+                // 🚀 防錯修正 3：調整生命週期優先順序，先確保 API 連上，再開視訊鏡頭
+                onMounted(async () => {
+                    await loadClothesConfig();
+                    await initGradioClient();
+                    initAREngine();
+                });
+
+                return {
+                    spaceId,
+                    aiStatusMessage,
+                    statusColorClass,
+                    arStatus,
+                    isLoading,
+                    clothesList,
+                    currentClothUrl,
+                    clothParams: window.clothParams,
+                    initGradioClient,
+                    selectCloth
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
                 const aiStatus = ref("disconnect"); // disconnect, connecting, ready, error, processing
                 const aiMessage = ref("等待設定 Space ID");
                 const arStatus = ref("相機初始化中...");
