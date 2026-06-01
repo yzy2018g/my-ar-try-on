@@ -1,107 +1,203 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>DeepFashion AR Stable</title>
-
-<script>
-/* =========================
-   🔥 ANTI PRINT CORE
-========================= */
-(function () {
-  console.log("[ANTI-PRINT] enabled");
-
-  const noop = () => {
-    console.warn("[ANTI-PRINT] blocked print()");
-  };
-
-  // lock window.print
-  Object.defineProperty(window, "print", {
-    value: noop,
-    writable: false,
-    configurable: false
-  });
-
-  // block Ctrl+P
-  document.addEventListener("keydown", function (e) {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      return false;
-    }
-  }, true);
-
-  // block print events
-  window.addEventListener("beforeprint", e => {
-    e.preventDefault?.();
-    console.warn("[ANTI-PRINT] beforeprint blocked");
-  });
-
-  // detect injection override
-  setInterval(() => {
-    if (window.print !== noop) {
-      console.warn("[ANTI-PRINT] print overridden → restoring");
-      window.print = noop;
-    }
-  }, 1000);
-
-})();
-</script>
-
-<script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
-<style>
-body { margin:0; overflow:hidden; background:#000; }
-canvas { width:100%; height:100%; }
-.ui { position:absolute; z-index:10; color:white; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepFashion 虛擬試穿系統 v2</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Gradio Client SDK -->
+    <script type="module">
+        import { client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1.8.1/+esm";
+        window.GradioClient = client;
+    </script>
+    <style>
+        /* 試穿畫布區域的相對定位 */
+        .stage-container {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            background-color: #f3f4f6;
+            overflow: hidden;
+            border-radius: 0.75rem;
+        }
+        .layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            pointer-events: none;
+        }
+    </style>
 </head>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
 
-<body>
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- 標題 -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-indigo-600 mb-2">👕 DeepFashion 智慧試穿間</h1>
+            <p class="text-gray-500">點選下方衣服，AI 將自動去背、精準對齊並套用在模特兒身上</p>
+        </header>
 
-<div id="app">
+        <!-- API 連線設定 -->
+        <div class="bg-white p-4 rounded-xl shadow-sm mb-6 border border-gray-100">
+            <label class="block text-xs font-semibold text-gray-500 mb-1">Gradio API 伺服器網址</label>
+            <input type="text" id="apiUrl" class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" 
+                   placeholder="請輸入後端產生的 https://xxxx.gradio.live">
+        </div>
 
-  <div class="ui" style="top:10px;left:10px">
-    <div>{{ status }}</div>
-    <div>{{ message }}</div>
-  </div>
+        <!-- 主要區塊：左選單、右預覽 -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- 左側：衣服選衣架 (4格) -->
+            <div class="lg:col-span-4 bg-white p-6 rounded-xl shadow-md">
+                <h3 class="text-lg font-bold mb-4 text-gray-700 border-b pb-2">👔 選擇試穿衣服</h3>
+                
+                <!-- 衣服列表容器 (由 JSON 動態產生) -->
+                <div id="clothesList" class="grid grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2">
+                    <div class="text-gray-400 text-sm col-span-2 text-center py-8">正在載入衣服清單...</div>
+                </div>
+            </div>
 
-  <video id="video" autoplay playsinline style="display:none;"></video>
-  <canvas id="canvas"></canvas>
+            <!-- 右側：試穿展示舞台 (8格) -->
+            <div class="lg:col-span-8 bg-white p-6 rounded-xl shadow-md flex flex-col justify-between">
+                <div>
+                    <h3 class="text-lg font-bold mb-2 text-gray-700">✨ 試穿效果預覽</h3>
+                    <div class="flex items-center space-x-4 mb-4 text-sm">
+                        <div>狀態：<span id="statusTxt" class="font-bold text-gray-400">請先設定 API 網址並選擇衣服</span></div>
+                        <div class="text-gray-400">|</div>
+                        <div>肩寬比：<span id="shoulderRatio" class="font-mono font-bold text-indigo-600">0.0000</span></div>
+                        <div>偏移比：<span id="offsetRatio" class="font-mono font-bold text-purple-600">0.0000</span></div>
+                    </div>
+                </div>
 
-</div>
+                <!-- 核心：多層疊加試穿畫布 -->
+                <div class="stage-container border-2 border-dashed border-gray-200 flex items-center justify-center">
+                    
+                    <!-- 底層：使用者/模特兒照片 (請替換成你的照片路徑，或讓使用者上傳) -->
+                    <img id="userModelImg" class="layer" src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=500&auto=format&fit=crop" alt="模特兒底圖">
+                    
+                    <!-- 上層：AI 處理過後的衣服疊加層 -->
+                    <img id="clothOverlayImg" class="layer hidden" alt="衣服疊加層">
 
-<script>
-new Vue({
-  el: "#app",
-  data: {
-    status: "init",
-    message: "loading...",
-    clothImage: new Image(),
-    clothLoaded: false,
-    clothUrl: "https://raw.githubusercontent.com/yzy2018g/my-ar-filter/deepfashion-style/style_1.png"
-  },
+                    <!-- 載入中動畫 -->
+                    <div id="loadingSpinner" class="hidden absolute z-10 flex flex-col items-center bg-white/80 p-4 rounded-xl shadow-lg">
+                        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-2"></div>
+                        <p class="text-xs text-gray-600 font-medium">AI 正在剪裁衣服與計算比例...</p>
+                    </div>
+                </div>
+                
+                <div class="text-xs text-gray-400 mt-2 text-center">
+                    提示：衣服會根據 Python 回傳的肩寬與偏移量，自動利用演算法對齊模特兒身形。
+                </div>
+            </div>
 
-  mounted() {
-    this.initImage();
-    this.initAR();
-  },
+        </div>
+    </div>
 
-  methods: {
+    <!-- 腳本邏輯 -->
+    <script>
+        // 初始化載入衣服 JSON
+        async function loadClothesConfig() {
+            try {
+                // 讀取同目錄下的 clothes.json
+                const response = await fetch('clothes.json');
+                const clothes = await response.json();
+                
+                const listContainer = document.getElementById('clothesList');
+                listContainer.innerHTML = ''; // 清空提示
 
-    /* =========================
-       SAFE IMAGE LOADER
-    ========================= */
-    initImage() {
-      this.clothImage.crossOrigin = "anonymous";
+                clothes.forEach(item => {
+                    // 建立衣物卡片
+                    const card = document.createElement('div');
+                    card.className = "border border-gray-200 rounded-lg p-2 cursor-pointer hover:border-indigo-500 hover:shadow-md transition group text-center";
+                    card.onclick = () => tryOnCloth(item.url, card);
+                    
+                    card.innerHTML = `
+                        <div class="h-32 bg-gray-50 rounded flex items-center justify-center overflow-hidden mb-2">
+                            <img src="${item.url}" class="max-h-full max-w-full object-contain group-hover:scale-105 transition duration-200">
+                        </div>
+                        <div class="text-xs font-medium text-gray-700 truncate">${item.name}</div>
+                    `;
+                    listContainer.appendChild(card);
+                });
+            } catch (error) {
+                console.error("載入 clothes.json 失敗:", error);
+                document.getElementById('clothesList').innerHTML = `<div class="text-red-500 text-xs col-span-2 text-center">無法載入 clothes.json，請檢查檔案是否存在。</div>`;
+            }
+        }
 
-      this.clothImage.onload = () => {
-        this.clothLoaded = true;
-        this.status = "ready";
-      };
+        // 核心試穿功能
+        async function tryOnCloth(clothUrl, cardElement) {
+            const apiUrl = document.getElementById('apiUrl').value.trim();
+            if (!apiUrl) {
+                alert('請先填入頂部的 Gradio API 網址！');
+                return;
+            }
+
+            // UI 狀態切換
+            document.querySelectorAll('#clothesList > div').forEach(el => el.classList.remove('ring-2', 'ring-indigo-500'));
+            cardElement.classList.add('ring-2', 'ring-indigo-500');
+
+            const statusTxt = document.getElementById('statusTxt');
+            const clothOverlayImg = document.getElementById('clothOverlayImg');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const shoulderRatio = document.getElementById('shoulderRatio');
+            const offsetRatio = document.getElementById('offsetRatio');
+
+            statusTxt.innerText = "傳送衣服至 AI 伺服器...";
+            statusTxt.className = "font-bold text-blue-500";
+            loadingSpinner.classList.remove('hidden');
+            clothOverlayImg.classList.add('hidden');
+
+            try {
+                // 連接 Gradio
+                const app = await window.GradioClient(apiUrl);
+                // 呼叫預設的 /predict 節點
+                const result = await app.predict("/predict", [ clothUrl ]);
+                
+                // 解構 Python 回傳值: [status, final_img, shoulder_ratio, offset_ratio]
+                const [status, imgData, shoulder, offset] = result.data;
+                
+                statusTxt.innerText = status;
+
+                if (status === "OK" && imgData && imgData.url) {
+                    statusTxt.className = "font-bold text-green-600";
+                    
+                    // 填入計算數值
+                    shoulderRatio.innerText = Number(shoulder).toFixed(4);
+                    offsetRatio.innerText = Number(offset).toFixed(4);
+
+                    // 將去背、去皮膚後的衣服顯示在疊加層
+                    clothOverlayImg.src = imgData.url;
+                    clothOverlayImg.classList.remove('hidden');
+
+                    /**
+                     * 💡 智慧對齊演算法說明：
+                     * 這裡可以根據 Python 計算出來的 shoulder 和 offset 來微調前端圖片的位置與大小。
+                     * 以下範例直接疊加。如果需要根據比例縮放，可以透過 style 調整：
+                     * clothOverlayImg.style.transform = `scale(${shoulder * 2}) translateY(${offset * 100}px)`;
+                     */
+                } else {
+                    statusTxt.className = "font-bold text-red-500";
+                    alert("AI 處理失敗: " + status);
+                }
+            } catch (error) {
+                console.error(error);
+                statusTxt.innerText = "連線失敗";
+                statusTxt.className = "font-bold text-red-600";
+            } finally {
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        // 網頁開啟時自動載入 JSON
+        window.onload = loadClothesConfig;
+    </script>
+</body>
+</html>
 
       this.clothImage.onerror = () => {
         this.status = "error";
