@@ -2,16 +2,16 @@
   {
     "id": "cloth_1",
     "name": "經典款上衣",
-    "url": "https://your-username.github.io/your-repo/cloth.png"
+    "url": "cloth.png"
   },
   {
     "id": "style_1",
     "name": "潮流風格 1",
-    "url": "https://your-username.github.io/your-repo/style_1.png"
+    "url": "style_1.png"
   },
   {
     "id": "style_2",
     "name": "時尚風格 2",
-    "url": "https://your-username.github.io/your-repo/style_2.png"
+    "url": "style_2.png"
   }
 ]
