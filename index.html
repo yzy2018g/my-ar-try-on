@@ -18,7 +18,7 @@
 
   <div id="app" class="relative w-screen h-screen select-none">
     
-    <div class="ui-layer top-4 left-4 right-4 bg-black/80 backdrop-blur-md p-4 rounded-xl border border-white/10 shadow-2xl">
+    <div v-if="currentCloth && currentCloth.id" class="ui-layer top-4 left-4 right-4 bg-black/80 backdrop-blur-md p-4 rounded-xl border border-white/10 shadow-2xl">
       <div class="flex items-center space-x-2">
         <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
         <span class="text-xs font-mono font-bold text-amber-400 tracking-wider">AI STYLE INSIGHT (品味分析)</span>
@@ -56,45 +56,51 @@
   </div>
 
   <script>
+    // 建立一個全域變態物件，確保 MediaPipe 繪圖隨時拿得到最新的圖片
+    window.clothParams = { scale: 1.7, offset: 0.2 };
+    window.clothImage = new Image();
+    window.isImgLoaded = false;
+    window.clothImage.onload = () => { window.isImgLoaded = true; };
+
     new Vue({
       el: '#app',
       data: {
-        statusMessage: '載入中...',
         currentCloth: {},
         clothesList: []
       },
       mounted() {
-        // 動態讀取 json 檔案
+        // 💡 修正點 1：先抓資料，抓完才啟動系統
         fetch('clothes.json')
           .then(response => {
-            if (!response.ok) throw new Error('找不到 clothes.json 檔案');
+            if (!response.ok) throw new Error('JSON 載入失敗');
             return response.json();
           })
           .then(data => {
             this.clothesList = data;
             this.currentCloth = data[0];
+            
+            // 💡 修正點 2：確實塞入全域變數，避免 MediaPipe 抓到空值
+            window.clothImage.src = this.currentCloth.src;
+            window.clothParams = this.currentCloth;
+            
+            // 數據完全就緒後，才啟動 AR 鏡頭
             this.initAR();
           })
           .catch(err => {
-            console.error(err);
+            print("資料載入有誤: " + err);
           });
       },
       methods: {
         selectCloth(cloth) {
           this.currentCloth = cloth;
-          window.clothImage.src = cloth.src;
+          window.isImgLoaded = false;
+          window.clothImage.src = cloth.src; // 即時更換圖片源
+          window.clothParams = cloth;        // 即時更換縮放參數
         },
         initAR() {
           const videoElement = document.getElementById('input_video');
           const canvasElement = document.getElementById('output_canvas');
           const canvasCtx = canvasElement.getContext('2d');
-
-          window.clothImage = new Image();
-          window.clothImage.src = this.currentCloth.src;
-          let isImgLoaded = false;
-          window.clothImage.onload = () => { isImgLoaded = true; };
-
-          const self = this;
 
           function onResults(results) {
             if (!results.poseLandmarks) return;
@@ -102,6 +108,60 @@
             canvasElement.width = videoElement.videoWidth;
             canvasElement.height = videoElement.videoHeight;
             canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            // 💡 修正點 3：使用 window 全域狀態，徹底阻斷非同步造成的崩潰
+            if (window.isImgLoaded && window.clothParams) {
+              const lm = results.poseLandmarks;
+              const leftShoulder = lm[11];
+              const rightShoulder = lm[12];
+
+              const shoulderWidth = Math.sqrt(
+                Math.pow((leftShoulder.x - rightShoulder.x) * canvasElement.width, 2) +
+                Math.pow((leftShoulder.y - rightShoulder.y) * canvasElement.height, 2)
+              );
+
+              const scaleFactor = window.clothParams.scale;
+              const offsetFactor = window.clothParams.offset;
+
+              const centerX = ((leftShoulder.x + rightShoulder.x) / 2) * canvasElement.width;
+              const centerY = ((leftShoulder.y + rightShoulder.y) / 2 + offsetFactor) * canvasElement.height;
+
+              const clothWidth = shoulderWidth * scaleFactor;
+              const clothHeight = clothWidth * (window.clothImage.height / window.clothImage.width);
+
+              canvasCtx.translate(centerX, centerY);
+              const angle = Math.atan2(
+                (leftShoulder.y - rightShoulder.y) * canvasElement.height,
+                (leftShoulder.x - rightShoulder.x) * canvasElement.width
+              );
+              canvasCtx.rotate(angle);
+
+              canvasCtx.globalAlpha = 0.85;
+              canvasCtx.drawImage(window.clothImage, -clothWidth / 2, -clothHeight * 0.1, clothWidth, clothHeight);
+              canvasCtx.globalAlpha = 1.0;
+            }
+            canvasCtx.restore();
+          }
+
+          const pose = new Pose({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+          });
+          pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+          pose.onResults(onResults);
+
+          const camera = new Camera(videoElement, {
+            onFrame: async () => { await pose.send({image: videoElement}); },
+            width: 1280, height: 720
+          });
+          camera.start();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
