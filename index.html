@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>DeepFashion AI 穿搭顧問</title>
+  <title>DeepFashion 智能雲端試衣鏡</title>
   <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
@@ -18,17 +18,14 @@
 
   <div id="app" class="relative w-screen h-screen select-none">
     
-    <div v-if="currentCloth && currentCloth.id" class="ui-layer top-4 left-4 right-4 bg-black/80 backdrop-blur-md p-4 rounded-xl border border-white/10 shadow-2xl">
+    <div v-if="currentCloth" class="ui-layer top-4 left-4 right-4 bg-black/80 backdrop-blur-md p-4 rounded-xl border border-white/10 shadow-2xl">
       <div class="flex items-center space-x-2">
-        <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-        <span class="text-xs font-mono font-bold text-amber-400 tracking-wider">AI STYLE INSIGHT (品味分析)</span>
+        <span :class="['w-2 h-2 rounded-full animate-pulse transition-colors duration-300', aiStatus === '就緒' ? 'bg-green-500' : (aiStatus === 'AI 運算中...' ? 'bg-red-500' : 'bg-gray-500')]"></span>
+        <span class="text-xs font-mono font-bold text-amber-400 tracking-wider">AI CLOUD ENGINE ➔ {{ aiStatus }}</span>
       </div>
       <div class="mt-2">
-        <h1 class="text-lg font-bold text-white">{{ currentCloth.name }}</h1>
-        <div class="flex flex-wrap gap-1 mt-1">
-          <span v-for="tag in currentCloth.tags" class="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-semibold"># {{ tag }}</span>
-        </div>
-        <p class="mt-2 text-xs text-gray-300 leading-relaxed">{{ currentCloth.advice }}</p>
+        <h1 class="text-lg font-bold text-white">{{ currentCloth.styleName }}</h1>
+        <p class="mt-1 text-xs text-gray-400">目前狀態：{{ aiMessage }}</p>
       </div>
     </div>
 
@@ -41,11 +38,11 @@
         <div 
           v-for="(cloth, index) in clothesList" 
           :key="index"
-          @click="selectCloth(cloth)"
+          @click="selectAndProcessCloth(cloth)"
           :class="['p-2 rounded-xl border-2 bg-black/85 backdrop-blur-md cursor-pointer transition-all duration-300 w-28 flex-shrink-0 text-center shadow-2xl', 
                    currentCloth.id === cloth.id ? 'border-amber-500 scale-105 bg-gray-900/90' : 'border-gray-700/70']"
         >
-          <div class="w-full h-20 mx-auto bg-white/10 rounded-lg flex items-center justify-center p-1 shadow-inner overflow-hidden">
+          <div class="w-full h-20 mx-auto bg-white/5 rounded-lg flex items-center justify-center p-1 shadow-inner overflow-hidden">
             <img :src="cloth.src" class="w-full h-full object-contain rounded">
           </div>
           <p class="text-[9px] mt-1.5 font-bold text-amber-400/80 tracking-widest uppercase">{{ cloth.styleName }}</p>
@@ -56,52 +53,159 @@
   </div>
 
   <script>
-    // 建立一個全域變態物件，確保 MediaPipe 繪圖隨時拿得到最新的圖片
-    window.clothParams = { scale: 1.7, offset: 0.2 };
+    // 全域變數，供 MediaPipe 繪圖隨時調用 (避免非同步衝突)
     window.clothImage = new Image();
     window.isImgLoaded = false;
+    // 初始化衣服的自動對齊參數
+    window.clothParams = { shoulderWidthPercent: 0.65, offsetFromTopPercent: 0.12 };
+
     window.clothImage.onload = () => { window.isImgLoaded = true; };
 
     new Vue({
       el: '#app',
       data: {
-        currentCloth: {},
-        clothesList: []
+        aiStatus: '連線中',
+        aiMessage: '請選擇下方風格啟動雲端解析...',
+        currentCloth: null,
+        clothesList: [
+          // 這裡存放 GitHub 上的原始圖片
+          { id: 1, styleName: "日系休閒", src: "style_1.png" },
+          { id: 2, styleName: "韓系大衣", src: "style_2.png" }
+        ]
       },
       mounted() {
-        // 💡 修正點 1：先抓資料，抓完才啟動系統
-        fetch('clothes.json')
-          .then(response => {
-            if (!response.ok) throw new Error('JSON 載入失敗');
-            return response.json();
-          })
-          .then(data => {
-            this.clothesList = data;
-            this.currentCloth = data[0];
-            
-            // 💡 修正點 2：確實塞入全域變數，避免 MediaPipe 抓到空值
-            window.clothImage.src = this.currentCloth.src;
-            window.clothParams = this.currentCloth;
-            
-            // 數據完全就緒後，才啟動 AR 鏡頭
-            this.initAR();
-          })
-          .catch(err => {
-            print("資料載入有誤: " + err);
-          });
+        // 預設直接觸發第一件衣服的雲端解析
+        this.selectAndProcessCloth(this.clothesList[0]);
+        this.initAR();
       },
       methods: {
-        selectCloth(cloth) {
+        // 🚀 終極商用邏輯：點擊按鈕，動態發送 GitHub 圖片網址給雲端 AI 解析
+        selectAndProcessCloth(cloth) {
           this.currentCloth = cloth;
-          window.isImgLoaded = false;
-          window.clothImage.src = cloth.src; // 即時更換圖片源
-          window.clothParams = cloth;        // 即時更換縮放參數
+          this.aiStatus = 'AI 運算中...';
+          this.aiMessage = `正在將 ${cloth.styleName} 模特兒原圖送往 Hugging Face 進行「自動去頭、去皮膚、算特徵點」...`;
+          window.isImgLoaded = false; // 處理時暫時把衣服藏起來
+
+          // 💡 1. 我們利用特工函式把 GitHub 圖片轉成 Base64，以呼叫 API
+          this.getImgBase64FromUrl(cloth.src, (base64Data) => {
+            
+            // 💡 2. 發送請求給你的 Hugging Face API
+            // ⚠️ 請精確替換下面的網址為你的 HF Space 網址 + "/api/predict"
+            const hfApiUrl = "https://你的帳號-你的專案名.hf.space/api/predict"; 
+
+            fetch(hfApiUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ data: [base64Data] }) // 將圖片送入
+            })
+            .then(response => response.json())
+            .then(res => {
+              if (res.data && res.data[1]) {
+                // 💡 3. 🎉 AI 解析完成！前端 Vue 收到純衣服透明圖與自動計算好的肩膀參數
+                window.clothImage.src = res.data[1]; 
+                window.clothParams = {
+                  shoulderWidthPercent: res.data[2],
+                  offsetFromTopPercent: res.data[3]
+                };
+                this.aiStatus = '就緒';
+                this.aiMessage = `AI 成功切除頭部與膚色！肩膀佔比: ${(res.data[2]*100).toFixed(1)}%, 領口偏移: ${(res.data[3]*100).toFixed(1)}%`;
+              } else {
+                this.aiStatus = '失敗';
+                this.aiMessage = '雲端回傳資料異常：' + res.data[0];
+              }
+            })
+            .catch(err => {
+              this.aiStatus = '錯誤';
+              this.aiMessage = '無法連線到 Hugging Face，請確認 API 是否處於 Running 狀態。';
+              print(err);
+            });
+          });
+        },
+        // 輔助函式：模擬 `handle_file`，將網域內的圖片轉成 Base64
+        getImgBase64FromUrl(url, callback) {
+          const img = new Image();
+          img.crossOrigin = 'Anonymous'; // 避開網域限制
+          img.src = url + '?t=' + new Date().getTime(); // 破除快取
+          img.onload = function() {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            callback(canvas.toDataURL('image/png'));
+          };
         },
         initAR() {
           const videoElement = document.getElementById('input_video');
           const canvasElement = document.getElementById('output_canvas');
           const canvasCtx = canvasElement.getContext('2d');
 
+          function onResults(results) {
+            if (!results.poseLandmarks) return;
+
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            // 🚀 全自動磁吸對齊演算法：不再用手動手寫，用雲端算出來的精準特徵點對齊
+            if (window.isImgLoaded && window.clothParams.shoulderWidthPercent) {
+              const lm = results.poseLandmarks;
+              const leftShoulder = lm[11];
+              const rightShoulder = lm[12];
+
+              // 計算畫面上「人」的肩膀寬度（像素）
+              const humanShoulderWidth = Math.sqrt(
+                Math.pow((leftShoulder.x - rightShoulder.x) * canvasElement.width, 2) +
+                Math.pow((leftShoulder.y - rightShoulder.y) * canvasElement.height, 2)
+              );
+
+              // 根據衣服本身肩膀佔整張圖的佔比，逆推這張透明圖應該縮放幾倍
+              const clothWidth = humanShoulderWidth / window.clothParams.shoulderWidthPercent;
+              const clothHeight = clothWidth * (window.clothImage.height / window.clothImage.width);
+
+              // 定位：將衣服的肩膀中心線與人體雙肩中心對齊
+              const centerX = ((leftShoulder.x + rightShoulder.x) / 2) * canvasElement.width;
+              const humanCenterY = ((leftShoulder.y + rightShoulder.y) / 2) * canvasElement.height;
+              
+              // 自動計算領口高低偏移補償
+              const autoOffsetY = clothHeight * window.clothParams.offsetFromTopPercent;
+              // 補償繪圖基點（衣服中心點在脖子下方），並加入旋轉補償
+              const centerY = humanCenterY - (clothHeight * 0.12) + (autoOffsetY * 0.5);
+
+              canvasCtx.translate(centerX, centerY);
+              
+              // 旋轉對齊肩膀傾斜度
+              const angle = Math.atan2(
+                (leftShoulder.y - rightShoulder.y) * canvasElement.height,
+                (leftShoulder.x - rightShoulder.x) * canvasElement.width
+              );
+              canvasCtx.rotate(angle);
+
+              // 渲染雲端送來的純衣服透明圖
+              canvasCtx.drawImage(window.clothImage, -clothWidth / 2, -clothHeight * 0.1, clothWidth, clothHeight);
+            }
+            canvasCtx.restore();
+          }
+
+          const pose = new Pose({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+          });
+          pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+          pose.onResults(onResults);
+
+          const camera = new Camera(videoElement, {
+            onFrame: async () => { await pose.send({image: videoElement}); },
+            width: 1280, height: 720
+          });
+          camera.start();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
           function onResults(results) {
             if (!results.poseLandmarks) return;
 
