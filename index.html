@@ -6,6 +6,7 @@
   <title>DeepFashion 智能雲端試衣鏡</title>
   <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@gradio/client@0.1.4/dist/index.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <style>
@@ -63,45 +64,131 @@
       el: '#app',
       data: {
         aiStatus: '連線中',
-        aiMessage: '請選擇下方風格啟動雲端解析...',
+        aiMessage: '正在初始化雲端 AI 套件...',
         currentCloth: null,
+        hfClient: null,
         clothesList: [
           { id: 1, styleName: "日系休閒", src: "style_1.png" },
           { id: 2, styleName: "韓系大衣", src: "style_2.png" }
         ]
       },
-      mounted() {
-        this.selectAndProcessCloth(this.clothesList[0]);
+      async mounted() {
+        try {
+          // 🚀 1. 初始化 Hugging Face 官方 Client (直接綁定你的 Space)
+          this.hfClient = await gClient.Client.connect("MichaelYo/my-ar-cloth-api");
+          this.aiStatus = '就緒';
+          this.aiMessage = '雲端 AI 引擎連線成功，請選擇風格！';
+          
+          // 預設觸發第一件衣服
+          this.selectAndProcessCloth(this.clothesList[0]);
+        } catch (err) {
+          this.aiStatus = '錯誤';
+          this.aiMessage = '無法初始化 HF Client，請確認 Space 是否處於 Running 狀態。';
+          console.error("HF連線失敗:", err);
+        }
         this.initAR();
       },
       methods: {
-        selectAndProcessCloth(cloth) {
+        async selectAndProcessCloth(cloth) {
+          if (!this.hfClient) return;
+
           this.currentCloth = cloth;
           this.aiStatus = 'AI 運算中...';
-          this.aiMessage = `正在將 ${cloth.styleName} 原始圖片送往 Hugging Face 進行雲端 AI 去頭、去皮膚、特徵點計算...`;
+          this.aiMessage = `正在透過官方 Client 傳送 ${cloth.styleName}，進行自動去頭、去皮膚...`;
           window.isImgLoaded = false;
 
-          this.getImgBase64FromUrl(cloth.src, (base64Data) => {
-            
-            // ⚠️ 請在此處精確填寫你的 Hugging Face API 網址
-            const hfApiUrl = "https://michaelyo-my-ar-cloth-api.hf.space/api/predict"; 
+          // 2. 獲取圖片的 Blob 物件（官方 Client 要求格式，完美避開 CORS 限制）
+          try {
+            const response = await fetch(cloth.src + '?t=' + new Date().getTime());
+            const blob = await response.blob();
 
-            // 修正後的符合 Gradio API 規範的標準呼叫格式
-            fetch(hfApiUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ data: [base64Data] })
-            })
-            .then(response => {
-              if (!response.ok) throw new Error('網路回應不正常');
-              return response.json();
-            })
-            .then(res => {
-              if (res.data && res.data[1]) {
-                window.clothImage.src = res.data[1]; 
-                window.clothParams = {
-                  shoulderWidthPercent: res.data[2],
-                  offsetFromTopPercent: res.data[3]
+            // 🚀 3. 呼叫 predict（格式等同於你貼給我的 Python 官方寫法）
+            const result = await this.hfClient.predict("/process_clothing", {
+              input_image: blob
+            });
+
+            if (result && result.data && result.data[1]) {
+              // 4. 解析成功！拿到純衣服透明圖與自動計算好的肩膀參數
+              window.clothImage.src = result.data[1]; 
+              window.clothParams = {
+                shoulderWidthPercent: result.data[2],
+                offsetFromTopPercent: result.data[3]
+              };
+              this.aiStatus = '就緒';
+              this.aiMessage = `AI 成功切除頭部！肩膀佔比: ${(result.data[2]*100).toFixed(1)}%, 領口偏移: ${(result.data[3]*100).toFixed(1)}%`;
+            } else {
+              this.aiStatus = '失敗';
+              this.aiMessage = '雲端 API 回傳資料無效。';
+            }
+          } catch (err) {
+            this.aiStatus = '錯誤';
+            this.aiMessage = '發送請求至 Hugging Face 時發生異常。';
+            console.error("預測失敗:", err);
+          }
+        },
+        initAR() {
+          const videoElement = document.getElementById('input_video');
+          const canvasElement = document.getElementById('output_canvas');
+          const canvasCtx = canvasElement.getContext('2d');
+
+          function onResults(results) {
+            if (!results.poseLandmarks) return;
+
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (window.isImgLoaded && window.clothParams.shoulderWidthPercent) {
+              const lm = results.poseLandmarks;
+              const leftShoulder = lm[11];
+              const rightShoulder = lm[12];
+
+              const humanShoulderWidth = Math.sqrt(
+                Math.pow((leftShoulder.x - rightShoulder.x) * canvasElement.width, 2) +
+                Math.pow((leftShoulder.y - rightShoulder.y) * canvasElement.height, 2)
+              );
+
+              const clothWidth = humanShoulderWidth / window.clothParams.shoulderWidthPercent;
+              const clothHeight = clothWidth * (window.clothImage.height / window.clothImage.width);
+
+              const centerX = ((leftShoulder.x + rightShoulder.x) / 2) * canvasElement.width;
+              const humanCenterY = ((leftShoulder.y + rightShoulder.y) / 2) * canvasElement.height;
+              
+              const autoOffsetY = clothHeight * window.clothParams.offsetFromTopPercent;
+              const centerY = humanCenterY - (clothHeight * 0.12) + (autoOffsetY * 0.5);
+
+              canvasCtx.translate(centerX, centerY);
+              
+              const angle = Math.atan2(
+                (leftShoulder.y - rightShoulder.y) * canvasElement.height,
+                (leftShoulder.x - rightShoulder.x) * canvasElement.width
+              );
+              canvasCtx.rotate(angle);
+
+              canvasCtx.drawImage(window.clothImage, -clothWidth / 2, -clothHeight * 0.1, clothWidth, clothHeight);
+            }
+            canvasCtx.restore();
+          }
+
+          const pose = new Pose({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+          });
+          pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+          pose.onResults(onResults);
+
+          const camera = new Camera(videoElement, {
+            onFrame: async () => { await pose.send({image: videoElement}); },
+            width: 1280, height: 720
+          });
+          camera.start();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
                 };
                 this.aiStatus = '就緒';
                 this.aiMessage = `AI 成功切除頭部與膚色！肩膀佔比: ${(res.data[2]*100).toFixed(1)}%, 領口偏移: ${(res.data[3]*100).toFixed(1)}%`;
