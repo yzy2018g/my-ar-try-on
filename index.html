@@ -15,7 +15,6 @@
         canvas { z-index: 10; pointer-events: none; } /* 讓 Canvas 疊在 Video 上 */
         .loading { display: none; color: #00ffcc; font-weight: bold; }
     </style>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@gradio/client@1/dist/index.min.js"></script>
 </head>
 <body>
 
@@ -35,104 +34,104 @@
             <canvas id="arCanvas"></canvas>
         </div>
     </div>
+    <script type="module">
+    // 直接從 CDN 引入官方最新的 Client 模組
+    import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1/dist/index.min.js";
 
-    <script>
-        const video = document.getElementById('webcam');
-        const canvas = document.getElementById('arCanvas');
-        const ctx = canvas.getContext('2d');
-        const loadingStatus = document.getElementById('loadingStatus');
-        
-        const HF_API_URL = "https://michaelyo-my-ar-cloth-api.hf.space/predict"; // Hugging Face API 節點
-        let currentClothingImage = new Image(); // 儲存去背後的衣服圖像
-        let isClothLoaded = false;
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('arCanvas');
+    const ctx = canvas.getContext('2d');
+    const loadingStatus = document.getElementById('loadingStatus');
+    
+    let currentClothingImage = new Image(); // 儲存去背後的衣服圖像
+    let isClothLoaded = false;
 
-        // 1. 初始化相機
-        async function setupCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
-                video.srcObject = stream;
-                video.addEventListener('loadedmetadata', () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    requestAnimationFrame(renderLoop);
-                });
-            } catch (err) {
-                alert("無法開啟相機，請檢查權限設定。");
-                console.error(err);
-            }
+    // 1. 初始化相機
+    async function setupCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+            video.srcObject = stream;
+            video.addEventListener('loadedmetadata', () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                requestAnimationFrame(renderLoop);
+            });
+        } catch (err) {
+            alert("無法開啟相機，請檢查權限設定。");
+            console.error(err);
         }
-
-        // 2. 選擇衣服並送去 Hugging Face 去背
-async function selectCloth(imgSrc, element) {
-    // 切換 UI 高亮
-    document.querySelectorAll('.preview-box img').forEach(img => img.classList.remove('active'));
-    element.classList.add('active');
-
-    loadingStatus.style.display = "block";
-    loadingStatus.textContent = "後端 AI 去背處理中...請稍候...";
-    isClothLoaded = false;
-
-    try {
-        // 轉成本地 Blob
-        const response = await fetch(imgSrc);
-        const blob = await response.blob();
-
-        // 1. 連接到你的 Hugging Face Space (直接填你的 Space ID: 帳號/名稱)
-        // 這樣做會自動走官方的 WebSocket/API 管道，100% 避開 403 錯誤
-        const { client } = await window.gradioConnect("michaelyo/my-ar-cloth-api");
-
-        // 2. 呼叫 /predict 終端
-        const result = await client.predict("/predict", { 
-            input_image: blob 
-        });
-
-        console.log("Gradio Client 回傳結果:", result);
-
-        // 3. 取得去背後的圖片網址
-        if (result.data && result.data[0]) {
-            const dataObj = result.data[0];
-
-            if (dataObj && typeof dataObj === 'object' && dataObj.url) {
-                currentClothingImage.src = dataObj.url;
-            } else if (typeof dataObj === 'string') {
-                currentClothingImage.src = dataObj;
-            }
-
-            currentClothingImage.onload = () => {
-                isClothLoaded = true;
-                loadingStatus.style.display = "none";
-            };
-        }
-    } catch (error) {
-        console.error("詳細錯誤訊息:", error);
-        loadingStatus.textContent = "AI 處理失敗：" + error.message;
     }
-}
 
+    // 2. 選擇衣服並送去 Hugging Face 去背 (將函式綁定到 window 讓 HTML 的 onclick 可以觸發)
+    window.selectCloth = async function(imgSrc, element) {
+        // 切換 UI 高亮
+        document.querySelectorAll('.preview-box img').forEach(img => img.classList.remove('active'));
+        element.classList.add('active');
 
-        // 3. AR 即時渲染迴圈
-        function renderLoop() {
-            // 清除畫布
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // 如果 AI 衣服已經去背完成，就畫在畫布上
-            if (isClothLoaded) {
-                // 這裡做一個簡單的固定位置渲染（畫在畫面正中央，佔畫面的 60% 寬度）
-                // 之後若有導入 MediaPipe Body, 這裡的 X, Y, Width, Height 可由骨架節點決定
-                const clothWidth = canvas.width * 0.6;
-                const clothHeight = clothWidth * (currentClothingImage.height / currentClothingImage.width);
-                const clothX = (canvas.width - clothWidth) / 2;
-                const clothY = (canvas.height - clothHeight) / 2 + 50; // 稍微往下移到身體位置
+        loadingStatus.style.display = "block";
+        loadingStatus.textContent = "後端 AI 去背處理中...請稍候...";
+        isClothLoaded = false;
 
-                ctx.drawImage(currentClothingImage, clothX, clothY, clothWidth, clothHeight);
+        try {
+            // 轉成本地 Blob
+            const response = await fetch(imgSrc);
+            const blob = await response.blob();
+
+            // 1. 初始化 Gradio Client 連線 (直接填入你的 Space ID)
+            const app = await Client.connect("michaelyo/my-ar-cloth-api");
+
+            // 2. 呼叫後端 /predict 接口
+            const result = await app.predict("/predict", { 
+                input_image: blob 
+            });
+
+            console.log("Gradio 官方 SDK 回傳結果:", result);
+
+            // 3. 取得去背後的圖片網址
+            if (result.data && result.data[0]) {
+                const dataObj = result.data[0];
+                
+                // 相容新舊版 Gradio 回傳格式
+                if (dataObj && typeof dataObj === 'object' && dataObj.url) {
+                    currentClothingImage.src = dataObj.url;
+                } else if (typeof dataObj === 'string') {
+                    currentClothingImage.src = dataObj;
+                }
+
+                currentClothingImage.onload = () => {
+                    isClothLoaded = true;
+                    loadingStatus.style.display = "none";
+                };
             }
+        } catch (error) {
+            console.error("詳細錯誤訊息:", error);
+            loadingStatus.textContent = "AI 處理失敗：" + error.message;
+        }
+    }
 
-            requestAnimationFrame(renderLoop);
+    // 3. AR 即時渲染迴圈
+    function renderLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        if (isClothLoaded) {
+            // 固定位置渲染（畫在畫面正中央，佔畫面的 60% 寬度）
+            const clothWidth = canvas.width * 0.6;
+            const clothHeight = clothWidth * (currentClothingImage.height / currentClothingImage.width);
+            const clothX = (canvas.width - clothWidth) / 2;
+            const clothY = (canvas.height - clothHeight) / 2 + 50; 
+
+            ctx.drawImage(currentClothingImage, clothX, clothY, clothWidth, clothHeight);
         }
 
-        // 啟動相機
-        setupCamera();
-    </script>
+        requestAnimationFrame(renderLoop);
+    }
+
+    // 啟動相機
+    setupCamera();
+</script>
+
+    
+        
 </body>
 </html>
 
