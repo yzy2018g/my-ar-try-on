@@ -1,449 +1,72 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DeepFashion AR 智慧試穿鏡 v8.2 Pro</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.prod.js"></script>
-    <script type="module">
-        import { client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1.10.0/+esm";
-        window.GradioClient = client;
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <meta charset="utf-8">
+    <title>API Test</title>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+<body>
 
-    <div id="app" class="container mx-auto px-4 py-6 max-w-7xl">
-        <header class="flex flex-col md:flex-row md:items-center md:justify-between border-b border-slate-800 pb-4 mb-6 gap-4">
-            <div>
-                <h1 class="text-2xl font-black tracking-tight text-white flex items-center gap-2">
-                    <span>👕</span> DeepFashion <span class="text-indigo-500">AR 智慧試穿鏡 v8.2</span>
-                </h1>
-                <p class="text-xs text-slate-400 mt-1">Production 生產級架構 (AbortController + Request Lock + Kalman Filter)</p>
-            </div>
-            <div class="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl flex items-center gap-3">
-                <div class="flex flex-col">
-                    <span class="text-[10px] font-bold text-slate-500 uppercase">Hugging Face Space ID</span>
-                    <input type="text" v-model="spaceId" @change="initGradioClient"
-                           class="bg-transparent text-xs font-mono text-slate-200 focus:outline-none border-b border-transparent focus:border-indigo-500 pb-0.5 w-64">
-                </div>
-                <div class="flex items-center gap-1.5 border-l border-slate-800 pl-3">
-                    <span :class="['h-2.5 w-2.5 rounded-full animate-pulse', statusColorClass]"></span>
-                    <span class="text-xs font-medium text-slate-300 whitespace-nowrap">{{ aiStatusMessage }}</span>
-                </div>
-            </div>
-        </header>
+<h2>HF API 測試</h2>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            <div class="lg:col-span-3 bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col">
-                <h3 class="text-sm font-bold text-slate-400 mb-3 flex items-center gap-2">
-                    <span>👔</span> 線上衣櫥 ({{ clothesList.length }})
-                </h3>
-                
-                <div class="grid grid-cols-2 lg:grid-cols-1 gap-3 overflow-y-auto max-h-[600px] pr-1">
-                    <div v-for="item in clothesList" :key="item.url"
-                         @click="selectCloth(item)"
-                         :class="['p-2 rounded-xl border transition cursor-pointer text-center bg-slate-950 flex flex-col items-center justify-between min-h-[140px]', 
-                                  currentClothUrl === item.url ? 'border-indigo-500 ring-2 ring-indigo-500/20' : 'border-slate-800 hover:border-slate-700']">
-                        <div class="h-24 w-full bg-slate-900/50 rounded-lg flex items-center justify-center p-1 overflow-hidden">
-                            <img :src="item.url" class="max-h-full max-w-full object-contain">
-                        </div>
-                        <div class="text-xs font-semibold text-slate-300 truncate w-full mt-2">{{ item.name }}</div>
-                    </div>
-                </div>
-            </div>
+<input
+    id="url"
+    style="width:600px"
+    value="https://raw.githubusercontent.com/yzy2018g/my-ar-filter/deepfashion-style/style_1.png">
 
-            <div class="lg:col-span-9 bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between">
-                <div class="flex flex-wrap items-center justify-between border-b border-slate-800 pb-3 mb-3 gap-2">
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs bg-indigo-500/10 text-indigo-400 font-bold px-2.5 py-1 rounded-md border border-indigo-500/20">
-                            AR 鏡頭: {{ arStatus }}
-                        </span>
-                        <span v-if="handMaskActive" class="text-[11px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-md font-bold">
-                            ✋ 前景手部遮擋已激活
-                        </span>
-                    </div>
-                    <div class="flex items-center gap-4 text-xs font-mono text-slate-400 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
-                        <div>肩寬佔比: <span class="text-indigo-400 font-bold">{{ (clothParams.shoulderWidthPercent * 100).toFixed(1) }}%</span></div>
-                        <div class="text-slate-700">|</div>
-                        <div>領口偏移: <span class="text-purple-400 font-bold">{{ (clothParams.offsetFromTopPercent * 100).toFixed(1) }}%</span></div>
-                    </div>
-                </div>
+<button onclick="testAPI()">
+    測試 API
+</button>
 
-                <div class="relative w-full aspect-video bg-slate-950 rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center">
-                    
-                    <video id="input_video" class="hidden" autoplay playsinline muted></video>
-                    <canvas id="output_canvas" class="w-full h-full object-contain scale-x-[-1]"></canvas> 
+<pre id="log"></pre>
 
-                    <div v-if="isLoading" class="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center">
-                        <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-xs text-center">
-                            <div class="animate-spin rounded-full h-8 w-8 border-2 border-indigo-500 border-t-transparent mb-3"></div>
-                            <h4 class="text-sm font-bold text-slate-200 mb-1">AI 雲端剪裁中</h4>
-                            <p class="text-xs text-slate-500">{{ queueMessage }}</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="text-[11px] text-slate-500 mt-2 text-center">
-                    💡 v8.2 商業守衛：引入單次連線鎖（Request Lock）、Gradio 實體連線熔斷機制與 AbortController 網路強制中止器。
-                </div>
-            </div>
+<script type="module">
+import { client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1.10.0/+esm";
 
-        </div>
-    </div>
+const log = document.getElementById("log");
 
-    <script>
-        // Kalman Filter 1D 物理模型
-        class Kalman1D {
-            constructor(q = 0.005, r = 0.05) {
-                this.q = q; this.r = r; this.x = 0; this.p = 1; this.k = 0; 
-            }
-            update(measurement) {
-                this.p = this.p + this.q;
-                this.k = this.p / (this.p + this.r);
-                this.x = this.x + this.k * (measurement - this.x);
-                this.p = (1 - this.k) * this.p;
-                return this.x;
-            }
-        }
+window.testAPI = async () => {
 
-        const { createApp, ref, computed, onMounted } = Vue;
+    try {
 
-        createApp({
-            setup() {
-                const spaceId = ref("MichaelYo/my-ar-cloth-api"); 
-                const aiStatus = ref("disconnect"); 
-                const aiMessage = ref("正在連線至雲端...");
-                const arStatus = ref("相機初始化中...");
-                const isLoading = ref(false);
-                const queueMessage = ref("請求傳送中...");
-                const handMaskActive = ref(false);
-                
-                const clothesList = ref([]);
-                const currentClothUrl = ref("");
-                
-                const clothParams = ref({
-                    shoulderWidthPercent: 0.0,
-                    offsetFromTopPercent: 0.0
-                });
+        log.textContent = "連線中...\n";
 
-                window.clothImage = new Image();
-                window.isImgLoaded = false;
-                
-                // 記憶體快取
-                const clothCache = new Map();
+        const app = await client(
+            "MichaelYo/my-ar-cloth-api"
+        );
 
-                // 🚀 修正點 1：建立單次請求防重入狀態鎖 (防範 UI 連點與 Request 重疊)
-                let isProcessing = false;
+        log.textContent += "Space 已連線\n";
+        log.textContent += "開始 predict...\n";
 
-                // 🚀 修正點 2：安全的可中止式 Timeout 斷路器（並清除計時器避免記憶體洩漏）
-                function withTimeout(promise, ms, controller) {
-                    let timer;
-                    const timeoutPromise = new Promise((_, reject) => {
-                        timer = setTimeout(() => {
-                            if (controller) controller.abort(); // 🚀 真正從網路層掐斷卡死的 Socket！
-                            reject(new Error("雲端 AI 預測逾時（60秒）"));
-                        }, ms);
-                    });
+        const start = performance.now();
 
-                    return Promise.race([
-                        promise.finally(() => clearTimeout(timer)),
-                        timeoutPromise
-                    ]);
-                }
+        const result = await app.predict(
+            "/predict",
+            [document.getElementById("url").value]
+        );
 
-                const kx = new Kalman1D(); const ky = new Kalman1D(); const kw = new Kalman1D(); const kh = new Kalman1D(); const ka = new Kalman1D();
-                let latestHandLandmarks = null; let isFirstFrame = true;
+        const sec =
+            ((performance.now() - start) / 1000).toFixed(2);
 
-                const statusColorClass = computed(() => {
-                    if (aiStatus.value === 'ready') return 'bg-emerald-500';
-                    if (aiStatus.value === 'processing') return 'bg-amber-400';
-                    if (aiStatus.value === 'error') return 'bg-rose-500';
-                    return 'bg-slate-600';
-                });
+        log.textContent +=
+            "\n完成\n耗時: " +
+            sec +
+            " 秒\n\n";
 
-                const aiStatusMessage = computed(() => aiMessage.value);
+        log.textContent +=
+            JSON.stringify(result, null, 2);
 
-                let appClient = null;
-                async function initGradioClient() {
-                    if (!spaceId.value.trim()) return;
-                    try {
-                        aiStatus.value = "processing";
-                        aiMessage.value = "與 HF Space 握手中...";
-                        appClient = await window.GradioClient(spaceId.value.trim(), { with_credentials: false });
-                        aiStatus.value = "ready";
-                        aiMessage.value = "雲端 AI 已就緒";
-                        appClient.predict("/predict", [ "" ]).catch(()=>{}); // 背景暖機
-                    } catch (err) {
-                        console.error("Gradio 連線失敗:", err);
-                        aiStatus.value = "error";
-                        aiMessage.value = "連線失敗，請檢查 Space ID";
-                    }
-                }
+        console.log(result);
 
-                async function loadClothesConfig() {
-                    try {
-                        const res = await fetch('clothes.json');
-                        clothesList.value = await res.json();
-                    } catch (err) {
-                        console.error("無法讀取 clothes.json:", err);
-                    }
-                }
+    } catch(err) {
 
-                // 🚀 修正點 3：全面防禦化重構的服飾選擇邏輯
-                async function selectCloth(item) {
-                    if (!appClient) {
-                        alert("AI 後端尚未就緒！");
-                        return;
-                    }
+        console.error(err);
 
-                    // 攔截阻斷器：如果當前有一個請求正在飛，直接冷酷攔截，杜絕 UI 連點爆發 Race Condition
-                    if (isProcessing) return;
+        log.textContent +=
+            "\nERROR:\n" +
+            err.message;
+    }
+};
+</script>
 
-                    let absoluteClothUrl = item.url;
-                    if (!absoluteClothUrl.startsWith("http")) {
-                        absoluteClothUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/')) + '/' + absoluteClothUrl;
-                    }
-
-                    currentClothUrl.value = item.url;
-                    window.isImgLoaded = false;
-
-                    // 0毫秒快取秒切
-                    if (clothCache.has(absoluteClothUrl)) {
-                        const cached = clothCache.get(absoluteClothUrl);
-                        clothParams.value = cached.params;
-                        isFirstFrame = true;
-                        window.clothImage.src = cached.processedImgUrl;
-                        window.clothImage.crossOrigin = "anonymous";
-                        window.clothImage.onload = () => {
-                            window.isImgLoaded = true;
-                            isLoading.value = false; 
-                            aiStatus.value = "ready";
-                            aiMessage.value = "快取即時對齊完成 (0ms)！";
-                        };
-                        return;
-                    }
-
-                    // 啟動請求鎖
-                    isProcessing = true;
-                    isLoading.value = true;
-                    aiStatus.value = "processing";
-                    aiMessage.value = "正在剪裁...";
-                    queueMessage.value = "建立雲端資料通道...";
-
-                    // 為本次請求建立專屬的 AbortController
-                    const controller = new AbortController();
-
-                    const runPredict = () => {
-                        return appClient.predict("/predict", [ absoluteClothUrl ]);
-                    };
-
-                    try {
-                        let result;
-
-                        try {
-                            // 第一次嘗試
-                            result = await withTimeout(runPredict(), 60000, controller);
-                        } catch (firstErr) {
-                            console.warn("第一次雲端超時，啟動第二次熔斷重試...", firstErr.message);
-                            queueMessage.value = "雲端回應慢，正在重新呼叫 AI...";
-                            
-                            // 再次建立新的控制器發送第二次重試
-                            const retryController = new AbortController();
-                            result = await withTimeout(runPredict(), 60000, retryController);
-                        }
-
-                        if (!result?.data || result.data.length < 4) {
-                            throw new Error("雲端回傳資料結構毀損");
-                        }
-
-                        const [status, imgData, shoulder, offset] = result.data;
-
-                        if (status !== "OK" || !imgData?.url) {
-                            throw new Error(status || "雲端後端核心拒絕請求");
-                        }
-
-                        clothParams.value = {
-                            shoulderWidthPercent: parseFloat(shoulder || 0),
-                            offsetFromTopPercent: parseFloat(offset || 0)
-                        };
-
-                        isFirstFrame = true;
-
-                        // 🚀 修正點 4：將解鎖狀態移入 onload 內部，並增加 onerror 保底阻斷
-                        window.clothImage.onload = () => {
-                            window.isImgLoaded = true;
-                            aiStatus.value = "ready";
-                            aiMessage.value = "服飾對齊完成！";
-                            
-                            // 只有在圖片真正下載完、Canvas 確定能畫的瞬間，才釋放 UI 狀態與請求鎖！
-                            isLoading.value = false;
-                            isProcessing = false;
-
-                            clothCache.set(absoluteClothUrl, {
-                                processedImgUrl: imgData.url,
-                                params: { ...clothParams.value }
-                            });
-                        };
-
-                        window.clothImage.onerror = () => {
-                            isLoading.value = false;
-                            isProcessing = false;
-                            alert("去背貼圖下載失敗，CORS 或網路異常");
-                        };
-
-                        window.clothImage.src = imgData.url;
-                        window.clothImage.crossOrigin = "anonymous"; 
-
-                    } catch (err) {
-                        console.error("SelectCloth 徹底攔截到錯誤:", err);
-                        alert(`試穿失敗：${err.message}`);
-                        aiStatus.value = "error";
-                        aiMessage.value = "剪裁失敗";
-                        isLoading.value = false;
-                        isProcessing = false; // 發生任何捕捉錯誤，解鎖請求狀態
-                    } finally {
-                        // 🚀 修正點 5：終極同步保險閘門。不使用直接賦值，而是用 setTimeout 排入微任務佇列（Microtask Queue）
-                        // 確保即使 onload 沒被觸發，UI 遮罩層也一定會被強制掀開，永不卡死！
-                        setTimeout(() => {
-                            isLoading.value = false;
-                        }, 0);
-                    }
-                }
-
-                // AR 整合渲染管道 (Pose + Hands)
-                function initAREngine() {
-                    const videoElement = document.getElementById('input_video');
-                    const canvasElement = document.getElementById('output_canvas');
-                    const canvasCtx = canvasElement.getContext('2d');
-
-                    function checkHandOcclusion(clothX, clothY, clothW, clothH) {
-                        if (!latestHandLandmarks) {
-                            handMaskActive.value = false;
-                            return false;
-                        }
-                        for (const hand of latestHandLandmarks) {
-                            const palmPoint = hand[9];
-                            const handPx = (1 - palmPoint.x) * canvasElement.width; 
-                            const handPy = palmPoint.y * canvasElement.height;
-
-                            if (handPx > clothX - clothW/2 && handPx < clothX + clothW/2 &&
-                                handPy > clothY - clothH*0.1 && handPy < clothY + clothH*0.9) {
-                                handMaskActive.value = true;
-                                return true;
-                            }
-                        }
-                        handMaskActive.value = false;
-                        return false;
-                    }
-
-                    function onPoseResults(results) {
-                        if (!results.poseLandmarks) {
-                            arStatus.value = "未偵測到人體";
-                            return;
-                        }
-
-                        const lm = results.poseLandmarks;
-                        const visibilityScore = lm[11].visibility + lm[12].visibility;
-                        if (visibilityScore < 1.5) {
-                            arStatus.value = "特徵模糊";
-                            return; 
-                        }
-                        arStatus.value = "雙肩鎖定中";
-
-                        canvasElement.width = videoElement.videoWidth;
-                        canvasElement.height = videoElement.videoHeight;
-                        
-                        canvasCtx.save();
-                        canvasCtx.setTransform(1, 0, 0, 1, 0, 0); 
-                        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-                        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-                        if (window.isImgLoaded && clothParams.value.shoulderWidthPercent > 0) {
-                            const leftShoulder = lm[11];  
-                            const rightShoulder = lm[12]; 
-
-                            const rawHumanShoulderWidth = Math.sqrt(
-                                Math.pow((leftShoulder.x - rightShoulder.x) * canvasElement.width, 2) +
-                                Math.pow((leftShoulder.y - rightShoulder.y) * canvasElement.height, 2)
-                            );
-
-                            let rawClothWidth = rawHumanShoulderWidth / clothParams.value.shoulderWidthPercent;
-                            
-                            const zDepthDelta = Math.abs(leftShoulder.z - rightShoulder.z);
-                            const depthScaleFactor = 1.0 + (zDepthDelta * 1.5); 
-                            rawClothWidth *= depthScaleFactor;
-
-                            const rawClothHeight = rawClothWidth * (window.clothImage.height / window.clothImage.width);
-                            const rawCenterX = ((leftShoulder.x + rightShoulder.x) / 2) * canvasElement.width;
-                            const rawHumanCenterY = ((leftShoulder.y + rightShoulder.y) / 2) * canvasElement.height;
-
-                            const autoOffsetY = rawClothHeight * clothParams.value.offsetFromTopPercent;
-                            const rawCenterY = rawHumanCenterY - (rawClothHeight * 0.12) + (autoOffsetY * 0.5);
-
-                            const rawAngle = Math.atan2(
-                                (leftShoulder.y - rightShoulder.y) * canvasElement.height,
-                                (leftShoulder.x - rightShoulder.x) * canvasElement.width
-                            );
-
-                            const kParams = {
-                                x: kx.update(rawCenterX),
-                                y: ky.update(rawCenterY),
-                                width: kw.update(rawClothWidth),
-                                height: kh.update(rawClothHeight),
-                                angle: ka.update(rawAngle)
-                            };
-
-                            const isOccluded = checkHandOcclusion(kParams.x, kParams.y, kParams.width, kParams.height);
-
-                            canvasCtx.translate(kParams.x, kParams.y);
-                            canvasCtx.rotate(kParams.angle);
-                            canvasCtx.globalAlpha = isOccluded ? 0.25 : 0.90; 
-                            
-                            canvasCtx.drawImage(window.clothImage, -kParams.width / 2, -kParams.height * 0.1, kParams.width, kParams.height);
-                            canvasCtx.globalAlpha = 1.0;
-                        }
-
-                        canvasCtx.restore();
-                    }
-
-                    const pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-                    pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-                    pose.onResults(onPoseResults);
-
-                    const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-                    hands.setOptions({ maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.5 });
-                    hands.onResults((handsResults) => { latestHandLandmarks = handsResults.multiHandLandmarks || null; });
-
-                    let lastTime = 0;
-                    const camera = new Camera(videoElement, {
-                        onFrame: async () => {
-                            const now = performance.now();
-                            if (now - lastTime < 33.3) return; 
-                            lastTime = now;
-                            await pose.send({ image: videoElement });
-                            await hands.send({ image: videoElement });
-                        },
-                        width: 1280, height: 720
-                    });
-                    camera.start().then(() => { arStatus.value = "鏡頭就緒"; });
-                }
-
-                onMounted(async () => {
-                    await loadClothesConfig();
-                    await initGradioClient(); 
-                    initAREngine();
-                });
-
-                return {
-                    spaceId, aiStatusMessage, statusColorClass, arStatus, isLoading, queueMessage, handMaskActive, clothesList, currentClothUrl, clothParams, initGradioClient, selectCloth
-                };
-            }
-        }).mount('#app');
-    </script>
 </body>
 </html>
