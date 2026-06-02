@@ -1,119 +1,128 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
-<title>AR Try On</title>
-<style>
-body {
-    font-family: Arial;
-    text-align: center;
-    background: #f5f5f5;
-}
-
-#preview {
-    position: relative;
-    width: 360px;
-    margin: auto;
-}
-
-video, canvas {
-    width: 360px;
-    border-radius: 12px;
-}
-
-#clothOverlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 360px;
-    pointer-events: none;
-}
-
-button {
-    margin: 10px;
-    padding: 10px;
-}
-
-.thumb {
-    width: 80px;
-    cursor: pointer;
-    margin: 5px;
-    border: 2px solid transparent;
-}
-
-.thumb.selected {
-    border: 2px solid red;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR 虛擬試衣間</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #222; color: white; margin: 0; padding: 20px; }
+        .container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        .preview-box { display: flex; gap: 10px; margin-bottom: 10px; }
+        .preview-box img { width: 80px; height: 80px; object-fit: cover; border: 2px solid #fff; cursor: pointer; border-radius: 8px; }
+        .preview-box img.active { border-color: #00ffcc; }
+        .view-panel { position: relative; width: 100%; max-width: 500px; aspect-ratio: 3/4; background: #000; border-radius: 12px; overflow: hidden; }
+        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        canvas { z-index: 10; pointer-events: none; } /* 讓 Canvas 疊在 Video 上 */
+        .loading { display: none; color: #00ffcc; font-weight: bold; }
+    </style>
 </head>
-
 <body>
 
-<h2>AR 試衣系統</h2>
+    <h1>AR 虛擬試衣間</h1>
+    
+    <div class="container">
+        <div class="preview-box">
+            <img src="cloth.png" alt="預覽1" onclick="selectCloth('cloth.png', this)">
+            <img src="style_1.png" alt="預覽2" onclick="selectCloth('style_1.png', this)">
+            <img src="style_2.png" alt="預覽3" onclick="selectCloth('style_2.png', this)">
+        </div>
 
-<div>
-    <img src="style_1.png" class="thumb" onclick="selectCloth('style_1.png', this)">
-    <img src="style_2.png" class="thumb" onclick="selectCloth('style_2.png', this)">
-</div>
+        <div id="loadingStatus" class="loading">後端 AI 去背處理中...請稍候...</div>
 
-<div id="preview">
-    <video id="video" autoplay></video>
-    <canvas id="canvas"></canvas>
-    <img id="clothOverlay">
-</div>
+        <div class="view-panel">
+            <video id="webcam" autoplay playsinline muted></video>
+            <canvas id="arCanvas"></canvas>
+        </div>
+    </div>
 
-<br>
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('arCanvas');
+        const ctx = canvas.getContext('2d');
+        const loadingStatus = document.getElementById('loadingStatus');
+        
+        const HF_API_URL = "https://michaelyo-my-ar-cloth-api.hf.space/predict"; // Hugging Face API 節點
+        let currentClothingImage = new Image(); // 儲存去背後的衣服圖像
+        let isClothLoaded = false;
 
-<button onclick="capture()">試穿</button>
+        // 1. 初始化相機
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+                video.srcObject = stream;
+                video.addEventListener('loadedmetadata', () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    requestAnimationFrame(renderLoop);
+                });
+            } catch (err) {
+                alert("無法開啟相機，請檢查權限設定。");
+                console.error(err);
+            }
+        }
 
-<script>
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-const clothOverlay = document.getElementById("clothOverlay");
+        // 2. 選擇衣服並送去 Hugging Face 去背
+        async function selectCloth(imgSrc, element) {
+            // 切換 UI 高亮
+            document.querySelectorAll('.preview-box img').forEach(img => img.classList.remove('active'));
+            element.classList.add('active');
 
-let selectedCloth = "style_1.png";
+            loadingStatus.style.display = "block";
+            isClothLoaded = false;
 
-// 🎥 開鏡頭
-navigator.mediaDevices.getUserMedia({ video: true })
-.then(stream => {
-    video.srcObject = stream;
-});
+            try {
+                // 將本地圖片轉為 Blob 送出
+                const response = await fetch(imgSrc);
+                const blob = await response.blob();
 
-// 👕 選衣服
-function selectCloth(img, el) {
-    selectedCloth = img;
+                // 呼叫 Hugging Face Space 的 Gradio API
+                const formData = new FormData();
+                formData.append("data", blob); // Gradio 的 /predict 接收 data 欄位
 
-    document.querySelectorAll(".thumb").forEach(t => t.classList.remove("selected"));
-    el.classList.add("selected");
+                const apiResponse = await fetch(HF_API_URL, {
+                    method: "POST",
+                    body: formData
+                });
 
-    clothOverlay.src = img;
-}
+                const result = await apiResponse.json();
+                
+                // Gradio 回傳的資料結構通常在 result.data[0] (Base64 或 圖片網址)
+                if (result.data && result.data[0]) {
+                    currentClothingImage.src = result.data[0]; // 設定給 Image 物件
+                    currentClothingImage.onload = () => {
+                        isClothLoaded = true;
+                        loadingStatus.style.display = "none";
+                    };
+                }
+            } catch (error) {
+                console.error("呼叫 HF API 失敗:", error);
+                loadingStatus.textContent = "AI 處理失敗，請重試。";
+            }
+        }
 
-// 📸 拍照 + 傳 API
-async function capture() {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+        // 3. AR 即時渲染迴圈
+        function renderLoop() {
+            // 清除畫布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 如果 AI 衣服已經去背完成，就畫在畫布上
+            if (isClothLoaded) {
+                // 這裡做一個簡單的固定位置渲染（畫在畫面正中央，佔畫面的 60% 寬度）
+                // 之後若有導入 MediaPipe Body, 這裡的 X, Y, Width, Height 可由骨架節點決定
+                const clothWidth = canvas.width * 0.6;
+                const clothHeight = clothWidth * (currentClothingImage.height / currentClothingImage.width);
+                const clothX = (canvas.width - clothWidth) / 2;
+                const clothY = (canvas.height - clothHeight) / 2 + 50; // 稍微往下移到身體位置
 
-    ctx.drawImage(video, 0, 0);
+                ctx.drawImage(currentClothingImage, clothX, clothY, clothWidth, clothHeight);
+            }
 
-    canvas.toBlob(async (blob) => {
-        let formData = new FormData();
-        formData.append("person", blob);
-        formData.append("cloth", selectedCloth);
+            requestAnimationFrame(renderLoop);
+        }
 
-        const res = await fetch("https://michaelyo-my-ar-cloth-api.hf.space/tryon", {
-            method: "POST",
-            body: formData
-        });
-
-        const data = await res.json();
-
-        // 假設回傳 base64
-        clothOverlay.src = data.result;
-    });
-}
-</script>
-
+        // 啟動相機
+        setupCamera();
+    </script>
 </body>
 </html>
+
