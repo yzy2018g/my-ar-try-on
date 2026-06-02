@@ -35,26 +35,68 @@
         </div>
     </div>
     <script type="module">
-    // 直接從 CDN 引入官方最新的 Client 模組
+    // 引入 Gradio API Client
     import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1/dist/index.min.js";
+    
+    // 引入 MediaPipe Pose 偵測工具
+    import { Pose } from "https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js";
+    import { Camera } from "https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js";
 
     const video = document.getElementById('webcam');
     const canvas = document.getElementById('arCanvas');
     const ctx = canvas.getContext('2d');
     const loadingStatus = document.getElementById('loadingStatus');
     
-    let currentClothingImage = new Image(); // 儲存去背後的衣服圖像
+    let currentClothingImage = new Image(); 
     let isClothLoaded = false;
+    let currentLandmarks = null; // 用來儲存最新的身體骨架座標
 
-    // 1. 初始化相機
+    // ==========================================
+    // 1. 初始化 MediaPipe Pose 身體追蹤
+    // ==========================================
+    const pose = new Pose({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    pose.setOptions({
+        modelComplexity: 1,      // 1 代表平衡速度與準確度
+        smoothLandmarks: true,   // 平滑化骨架，防止衣服抖動
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+
+    // 每次偵測到身體骨架時，更新座標
+    pose.onResults((results) => {
+        if (results.poseLandmarks) {
+            currentLandmarks = results.poseLandmarks;
+        } else {
+            currentLandmarks = null; // 沒偵測到人
+        }
+        // 觸發畫布渲染
+        renderLoop();
+    });
+
+    // ==========================================
+    // 2. 初始化相機並啟動偵測
+    // ==========================================
     async function setupCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
             video.srcObject = stream;
+            
             video.addEventListener('loadedmetadata', () => {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
-                requestAnimationFrame(renderLoop);
+                
+                // 讓 MediaPipe 透過 Camera 工具接管鏡頭，每秒持續送影格給 AI 追蹤
+                const camera = new Camera(video, {
+                    onFrame: async () => {
+                        await pose.send({ image: video });
+                    },
+                    width: video.videoWidth,
+                    height: video.videoHeight
+                });
+                camera.start();
             });
         } catch (err) {
             alert("無法開啟相機，請檢查權限設定。");
@@ -62,9 +104,10 @@
         }
     }
 
-    // 2. 選擇衣服並送去 Hugging Face 去背 (將函式綁定到 window 讓 HTML 的 onclick 可以觸發)
+    // ==========================================
+    // 3. 選擇衣服並送去 Hugging Face 去背
+    // ==========================================
     window.selectCloth = async function(imgSrc, element) {
-        // 切換 UI 高亮
         document.querySelectorAll('.preview-box img').forEach(img => img.classList.remove('active'));
         element.classList.add('active');
 
@@ -73,25 +116,15 @@
         isClothLoaded = false;
 
         try {
-            // 轉成本地 Blob
             const response = await fetch(imgSrc);
             const blob = await response.blob();
 
-            // 1. 初始化 Gradio Client 連線 (直接填入你的 Space ID)
-            const app = await Client.connect("michaelyo/my-ar-cloth-api");
+            // 直接連線你的後端 API
+            const app = await Client.connect("https://michaelyo-my-ar-cloth-api.hf.space");
+            const result = await app.predict("/predict", { input_image: blob });
 
-            // 2. 呼叫後端 /predict 接口
-            const result = await app.predict("/predict", { 
-                input_image: blob 
-            });
-
-            console.log("Gradio 官方 SDK 回傳結果:", result);
-
-            // 3. 取得去背後的圖片網址
             if (result.data && result.data[0]) {
                 const dataObj = result.data[0];
-                
-                // 相容新舊版 Gradio 回傳格式
                 if (dataObj && typeof dataObj === 'object' && dataObj.url) {
                     currentClothingImage.src = dataObj.url;
                 } else if (typeof dataObj === 'string') {
@@ -109,26 +142,68 @@
         }
     }
 
-    // 3. AR 即時渲染迴圈
+    // ==========================================
+    // 4. AR 即時渲染（動態計算衣服位置）
+    // ==========================================
     function renderLoop() {
+        // 清除上一格畫布
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        if (isClothLoaded) {
-            // 固定位置渲染（畫在畫面正中央，佔畫面的 60% 寬度）
-            const clothWidth = canvas.width * 0.6;
+        // 只有當「去背衣服好了」且「畫面中有偵測到人」才畫衣服
+        if (isClothLoaded && currentLandmarks) {
+            
+            // MediaPipe 關鍵點定義：11 是左肩，12 是右肩
+            // (注意：因為是前鏡頭鏡像關係，畫面上的左右會顛倒)
+            const leftShoulder = currentLandmarks[11];
+            const rightShoulder = currentLandmarks[12];
+
+            // 1. 將 MediaPipe 的 0~1 相對座標，轉換成 Canvas 的實際像素座標
+            const xL = leftShoulder.x * canvas.width;
+            const yL = leftShoulder.y * canvas.height;
+            const xR = rightShoulder.x * canvas.width;
+            const yR = rightShoulder.y * canvas.height;
+
+            // 2. 計算兩肩中點（作為衣服領口的中心掛點）
+            const midX = (xL + xR) / 2;
+            const midY = (yL + yR) / 2;
+
+            // 3. 計算兩肩寬度，並依比例放大（例如乘以 1.8 讓衣服蓋住肩膀與袖子）
+            const shoulderWidth = Math.sqrt(Math.pow(xL - xR, 2) + Math.pow(yL - yR, 2));
+            const clothWidth = shoulderWidth * 1.8; 
+
+            // 4. 根據衣服原始比例，計算出對應的高度
             const clothHeight = clothWidth * (currentClothingImage.height / currentClothingImage.width);
-            const clothX = (canvas.width - clothWidth) / 2;
-            const clothY = (canvas.height - clothHeight) / 2 + 50; 
 
-            ctx.drawImage(currentClothingImage, clothX, clothY, clothWidth, clothHeight);
+            // 5. 計算衣服左上角的渲染起點 (X, Y)
+            // 我們把中點往左移半個衣寬，往下移一點點（微調領口位置，1.15可視情況調整）
+            const clothX = midX - (clothWidth / 2);
+            const clothY = midY - (clothHeight * 0.15); 
+
+            // 6. 計算身體傾斜角度，讓衣服跟著肩膀旋轉
+            const angle = Math.atan2(yL - yR, xL - xR);
+
+            // 7. 繪製旋轉後的衣服
+            ctx.save();
+            ctx.translate(midX, midY); // 將畫布中心移到肩膀中點
+            ctx.rotate(angle);         // 旋轉畫布
+            
+            // 繪製衣服（此時座標以中點為基準微調）
+            ctx.drawImage(
+                currentClothingImage, 
+                -(clothWidth / 2), 
+                -(clothHeight * 0.15), 
+                clothWidth, 
+                clothHeight
+            );
+            
+            ctx.restore(); // 恢復畫布狀態
         }
-
-        requestAnimationFrame(renderLoop);
     }
 
     // 啟動相機
     setupCamera();
 </script>
+
 
     
         
