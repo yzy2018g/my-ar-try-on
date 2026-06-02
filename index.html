@@ -1,15 +1,37 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<h3>API 測試</h3>
+
 <button onclick="test()">測 API</button>
+
+<pre id="out">尚未測試</pre>
 
 <script>
 async function test() {
-  const res = await fetch("https://my-ar-filter.onrender.com/predict", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      url: "https://raw.githubusercontent.com/yzy2018g/my-ar-filter/deepfashion-style/style_1.png"
-    })
-  });
+  const out = document.getElementById("out");
+  out.innerText = "請求中...";
 
-  console.log(await res.json());
+  try {
+    const res = await fetch("https://my-ar-filter.onrender.com/predict", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        url: "https://raw.githubusercontent.com/yzy2018g/my-ar-filter/deepfashion-style/style_1.png"
+      })
+    });
+
+    const text = await res.text();  // 👈 避免 json crash
+    out.innerText = text;
+
+  } catch (e) {
+    out.innerText = "ERROR: " + e;
+  }
 }
 </script>
+
+</body>
+</html>
