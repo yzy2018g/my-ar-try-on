@@ -1,7 +1,8 @@
 fastapi
 uvicorn
-rembg
+requests
 pillow
 numpy
 opencv-python-headless
-requests
+rembg
+pydantic
