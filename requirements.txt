@@ -1,0 +1,6 @@
+gradio
+rembg
+numpy
+opencv-python-headless
+Pillow
+requests
