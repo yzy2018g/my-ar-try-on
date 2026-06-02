@@ -1,37 +1,42 @@
-<!DOCTYPE html>
-<html>
-<body>
-
-<h3>API 測試11:20</h3>
-
-<button onclick="test()">測 API</button>
-
-<pre id="out">尚未測試</pre>
+<button onclick="test()">測 API11:27</button>
+<pre id="out"></pre>
 
 <script>
 async function test() {
   const out = document.getElementById("out");
-  out.innerText = "請求中...";
+  out.innerText = "loading...";
 
-  try {
-    const res = await fetch("https://my-ar-filter.onrender.com/predict", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        url: "https://raw.githubusercontent.com/yzy2018g/my-ar-filter/deepfashion-style/style_1.png"
-      })
-    });
+  let retry = 0;
 
-    const text = await res.text();  // 👈 避免 json crash
-    out.innerText = text;
+  while (retry < 3) {
+    try {
+      const res = await fetch("https://my-ar-filter.onrender.com/predict", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          url: "https://raw.githubusercontent.com/yzy2018g/my-ar-filter/deepfashion-style/style_1.png"
+        })
+      });
 
-  } catch (e) {
-    out.innerText = "ERROR: " + e;
+      const data = await res.json();
+
+      if (data.status === "warming") {
+        out.innerText = "warming model... retrying";
+        await new Promise(r => setTimeout(r, 2000));
+        retry++;
+        continue;
+      }
+
+      out.innerText = JSON.stringify(data, null, 2);
+      return;
+
+    } catch (e) {
+      retry++;
+      out.innerText = "retry " + retry + " failed...";
+      await new Promise(r => setTimeout(r, 1500));
+    }
   }
+
+  out.innerText = "FAILED after retries";
 }
 </script>
-
-</body>
-</html>
