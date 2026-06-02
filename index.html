@@ -1,71 +1,110 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-    <meta charset="utf-8">
-    <title>API Test</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepFashion AR Test UX Fix</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.prod.js"></script>
+    <script type="module">
+        import { client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1.10.0/+esm";
+        window.GradioClient = client;
+    </script>
 </head>
-<body>
 
-<h2>HF API 測試</h2>
+<body style="background:#0f172a;color:white;font-family:sans-serif">
 
-<input
-    id="url"
-    style="width:600px"
-    value="https://raw.githubusercontent.com/yzy2018g/my-ar-filter/deepfashion-style/style_1.png">
+<div id="app" style="padding:20px">
 
-<button onclick="testAPI()">
-    測試 API
-</button>
+    <h2>HF API 測試（不卡 UI 版）</h2>
 
-<pre id="log"></pre>
+    <input v-model="url" style="width:90%;padding:8px" />
 
-<script type="module">
-import { client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1.10.0/+esm";
+    <br><br>
 
-const log = document.getElementById("log");
+    <button @click="testAPI" style="padding:10px 20px">
+        測試 API
+    </button>
 
-window.testAPI = async () => {
+    <p><b>狀態：</b>{{ status }}</p>
+    <p><b>進度提示：</b>{{ message }}</p>
 
-    try {
+    <img v-if="img" :src="img" style="max-width:300px;margin-top:10px"/>
 
-        log.textContent = "連線中...\n";
+</div>
 
-        const app = await client(
-            "MichaelYo/my-ar-cloth-api"
-        );
+<script>
+const { createApp } = Vue;
 
-        log.textContent += "Space 已連線\n";
-        log.textContent += "開始 predict...\n";
+createApp({
+    data() {
+        return {
+            url: "https://raw.githubusercontent.com/yzy2018g/my-ar-filter/deepfashion-style/style_1.png",
+            status: "idle",
+            message: "等待操作",
+            client: null,
+            img: ""
+        }
+    },
 
-        const start = performance.now();
+    async mounted() {
+        this.status = "connecting";
+        this.message = "連線 HF Space...";
 
-        const result = await app.predict(
-            "/predict",
-            [document.getElementById("url").value]
-        );
+        try {
+            this.client = await window.GradioClient("MichaelYo/my-ar-cloth-api");
+            this.status = "ready";
+            this.message = "Space 已連線";
+        } catch (e) {
+            this.status = "error";
+            this.message = "連線失敗";
+        }
+    },
 
-        const sec =
-            ((performance.now() - start) / 1000).toFixed(2);
+    methods: {
+        async testAPI() {
 
-        log.textContent +=
-            "\n完成\n耗時: " +
-            sec +
-            " 秒\n\n";
+            if (!this.client) {
+                this.message = "尚未連線";
+                return;
+            }
 
-        log.textContent +=
-            JSON.stringify(result, null, 2);
+            this.status = "processing";
 
-        console.log(result);
+            // 🚀 不再卡住 UI
+            this.message = "送出請求...";
 
-    } catch(err) {
+            await new Promise(r => setTimeout(r, 200));
 
-        console.error(err);
+            this.message = "AI 排隊中...";
 
-        log.textContent +=
-            "\nERROR:\n" +
-            err.message;
+            let result;
+
+            try {
+                const start = performance.now();
+
+                result = await this.client.predict("/predict", [
+                    this.url
+                ]);
+
+                const time = ((performance.now() - start) / 1000).toFixed(2);
+
+                this.message = `AI 完成（${time}s）`;
+
+                if (result?.data?.[1]?.url) {
+                    this.img = result.data[1].url;
+                }
+
+                this.status = "done";
+
+            } catch (err) {
+                console.error(err);
+                this.status = "error";
+                this.message = "API 失敗";
+            }
+        }
     }
-};
+}).mount("#app");
 </script>
 
 </body>
