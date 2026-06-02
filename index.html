@@ -1,14 +1,127 @@
-const formData = new FormData();
-formData.append("person", personFile);
-formData.append("cloth", clothFile);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AR Try-On Demo</title>
+  <style>
+    body {
+      font-family: Arial;
+      text-align: center;
+      padding: 20px;
+      background: #f5f5f5;
+    }
 
-const res = await fetch(
-  "https://michaelyo-my-ar-cloth-api.hf.space/tryon",
-  {
-    method: "POST",
-    body: formData
+    .box {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      max-width: 500px;
+      margin: auto;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    input {
+      margin: 10px 0;
+    }
+
+    button {
+      padding: 10px 20px;
+      border: none;
+      background: black;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: gray;
+    }
+
+    img {
+      margin-top: 20px;
+      max-width: 100%;
+      border-radius: 10px;
+    }
+
+    .loading {
+      display: none;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="box">
+  <h2>👕 AR Try-On Demo</h2>
+
+  <div>
+    <p>Person Image</p>
+    <input type="file" id="person" accept="image/*">
+  </div>
+
+  <div>
+    <p>Cloth Image</p>
+    <input type="file" id="cloth" accept="image/*">
+  </div>
+
+  <button onclick="tryOn()">Run Try-On</button>
+
+  <div class="loading" id="loading">⏳ Processing...</div>
+
+  <div>
+    <img id="result" />
+  </div>
+</div>
+
+<script>
+const API_URL = "https://michaelyo-my-ar-cloth-api.hf.space/tryon";
+
+async function tryOn() {
+  const personFile = document.getElementById("person").files[0];
+  const clothFile = document.getElementById("cloth").files[0];
+
+  if (!personFile || !clothFile) {
+    alert("Please upload both images!");
+    return;
   }
-);
 
-const data = await res.json();
-console.log(data);
+  const loading = document.getElementById("loading");
+  loading.style.display = "block";
+
+  const formData = new FormData();
+  formData.append("person", personFile);
+  formData.append("cloth", clothFile);
+
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      body: formData
+    });
+
+    const data = await res.json();
+
+    console.log("API response:", data);
+
+    // ===== case 1: base64 =====
+    if (data.result_base64) {
+      document.getElementById("result").src =
+        "data:image/jpeg;base64," + data.result_base64;
+    }
+
+    // ===== case 2: url =====
+    if (data.result_url) {
+      document.getElementById("result").src = data.result_url;
+    }
+
+  } catch (err) {
+    console.error(err);
+    alert("Error calling API");
+  }
+
+  loading.style.display = "none";
+}
+</script>
+
+</body>
+</html>
