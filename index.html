@@ -1,125 +1,117 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>AR Try-On Demo</title>
-  <style>
-    body {
-      font-family: Arial;
-      text-align: center;
-      padding: 20px;
-      background: #f5f5f5;
-    }
+<meta charset="UTF-8">
+<title>AR Try On</title>
+<style>
+body {
+    font-family: Arial;
+    text-align: center;
+    background: #f5f5f5;
+}
 
-    .box {
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      max-width: 500px;
-      margin: auto;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    }
+#preview {
+    position: relative;
+    width: 360px;
+    margin: auto;
+}
 
-    input {
-      margin: 10px 0;
-    }
+video, canvas {
+    width: 360px;
+    border-radius: 12px;
+}
 
-    button {
-      padding: 10px 20px;
-      border: none;
-      background: black;
-      color: white;
-      border-radius: 8px;
-      cursor: pointer;
-    }
+#clothOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 360px;
+    pointer-events: none;
+}
 
-    button:disabled {
-      background: gray;
-    }
+button {
+    margin: 10px;
+    padding: 10px;
+}
 
-    img {
-      margin-top: 20px;
-      max-width: 100%;
-      border-radius: 10px;
-    }
+.thumb {
+    width: 80px;
+    cursor: pointer;
+    margin: 5px;
+    border: 2px solid transparent;
+}
 
-    .loading {
-      display: none;
-      margin-top: 10px;
-    }
-  </style>
+.thumb.selected {
+    border: 2px solid red;
+}
+</style>
 </head>
 
 <body>
 
-<div class="box">
-  <h2>👕 AR Try-On Demo</h2>
+<h2>AR 試衣系統</h2>
 
-  <div>
-    <p>Person Image</p>
-    <input type="file" id="person" accept="image/*">
-  </div>
-
-  <div>
-    <p>Cloth Image</p>
-    <input type="file" id="cloth" accept="image/*">
-  </div>
-
-  <button onclick="tryOn()">Run Try-On</button>
-
-  <div class="loading" id="loading">⏳ Processing...</div>
-
-  <div>
-    <img id="result" />
-  </div>
+<div>
+    <img src="style_1.png" class="thumb" onclick="selectCloth('style_1.png', this)">
+    <img src="style_2.png" class="thumb" onclick="selectCloth('style_2.png', this)">
 </div>
 
+<div id="preview">
+    <video id="video" autoplay></video>
+    <canvas id="canvas"></canvas>
+    <img id="clothOverlay">
+</div>
+
+<br>
+
+<button onclick="capture()">試穿</button>
+
 <script>
-const API_URL = "https://michaelyo-my-ar-cloth-api.hf.space/tryon";
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const clothOverlay = document.getElementById("clothOverlay");
 
-async function tryOn() {
-  const personFile = document.getElementById("person").files[0];
-  const clothFile = document.getElementById("cloth").files[0];
+let selectedCloth = "style_1.png";
 
-  if (!personFile || !clothFile) {
-    alert("Please upload both images!");
-    return;
-  }
+// 🎥 開鏡頭
+navigator.mediaDevices.getUserMedia({ video: true })
+.then(stream => {
+    video.srcObject = stream;
+});
 
-  const loading = document.getElementById("loading");
-  loading.style.display = "block";
+// 👕 選衣服
+function selectCloth(img, el) {
+    selectedCloth = img;
 
-  const formData = new FormData();
-  formData.append("person", personFile);
-  formData.append("cloth", clothFile);
+    document.querySelectorAll(".thumb").forEach(t => t.classList.remove("selected"));
+    el.classList.add("selected");
 
-  try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      body: formData
+    clothOverlay.src = img;
+}
+
+// 📸 拍照 + 傳 API
+async function capture() {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    ctx.drawImage(video, 0, 0);
+
+    canvas.toBlob(async (blob) => {
+        let formData = new FormData();
+        formData.append("person", blob);
+        formData.append("cloth", selectedCloth);
+
+        const res = await fetch("https://michaelyo-my-ar-cloth-api.hf.space/tryon", {
+            method: "POST",
+            body: formData
+        });
+
+        const data = await res.json();
+
+        // 假設回傳 base64
+        clothOverlay.src = data.result;
     });
-
-    const data = await res.json();
-
-    console.log("API response:", data);
-
-    // ===== case 1: base64 =====
-    if (data.result_base64) {
-      document.getElementById("result").src =
-        "data:image/jpeg;base64," + data.result_base64;
-    }
-
-    // ===== case 2: url =====
-    if (data.result_url) {
-      document.getElementById("result").src = data.result_url;
-    }
-
-  } catch (err) {
-    console.error(err);
-    alert("Error calling API");
-  }
-
-  loading.style.display = "none";
 }
 </script>
 
