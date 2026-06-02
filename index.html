@@ -1,110 +1,88 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DeepFashion AR Test UX Fix</title>
-
-    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.prod.js"></script>
-    <script type="module">
-        import { client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1.10.0/+esm";
-        window.GradioClient = client;
-    </script>
+<meta charset="UTF-8">
+<title>HF API 測試（不卡 UI 版）</title>
 </head>
 
-<body style="background:#0f172a;color:white;font-family:sans-serif">
+<body style="background:#0b0f1a;color:#fff;font-family:Arial;padding:20px">
 
-<div id="app" style="padding:20px">
+<h2>HF API 測試</h2>
 
-    <h2>HF API 測試（不卡 UI 版）</h2>
+<input id="url" style="width:100%;padding:8px"
+value="https://raw.githubusercontent.com/yzy2018g/my-ar-filter/deepfashion-style/style_1.png">
 
-    <input v-model="url" style="width:90%;padding:8px" />
+<br><br>
 
-    <br><br>
+<button onclick="runTest()">測試 API</button>
+<button onclick="reset()">重置</button>
 
-    <button @click="testAPI" style="padding:10px 20px">
-        測試 API
-    </button>
+<p id="status">狀態：尚未開始</p>
+<p id="step">進度：-</p>
 
-    <p><b>狀態：</b>{{ status }}</p>
-    <p><b>進度提示：</b>{{ message }}</p>
+<pre id="log" style="background:#111;padding:10px;overflow:auto"></pre>
 
-    <img v-if="img" :src="img" style="max-width:300px;margin-top:10px"/>
+<img id="img" style="max-width:300px;margin-top:10px"/>
 
-</div>
+<script type="module">
+import { client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1.10.0/+esm";
 
-<script>
-const { createApp } = Vue;
+let app = null;
+let controller = null;
 
-createApp({
-    data() {
-        return {
-            url: "https://raw.githubusercontent.com/yzy2018g/my-ar-filter/deepfashion-style/style_1.png",
-            status: "idle",
-            message: "等待操作",
-            client: null,
-            img: ""
+window.runTest = async function () {
+    const url = document.getElementById("url").value;
+
+    document.getElementById("status").innerText = "狀態：連線中...";
+    document.getElementById("step").innerText = "進度：初始化";
+
+    try {
+        // 建立 client
+        if (!app) {
+            app = await client("MichaelYo/my-ar-cloth-api");
         }
-    },
 
-    async mounted() {
-        this.status = "connecting";
-        this.message = "連線 HF Space...";
+        document.getElementById("status").innerText = "狀態：Space 已連線";
 
-        try {
-            this.client = await window.GradioClient("MichaelYo/my-ar-cloth-api");
-            this.status = "ready";
-            this.message = "Space 已連線";
-        } catch (e) {
-            this.status = "error";
-            this.message = "連線失敗";
+        // 每次點擊都切斷上一個 request
+        if (controller) controller.abort();
+        controller = new AbortController();
+
+        document.getElementById("step").innerText = "開始 predict...";
+
+        const timeout = new Promise((_, reject) => {
+            setTimeout(() => {
+                controller.abort();
+                reject(new Error("TIMEOUT 10s"));
+            }, 10000);
+        });
+
+        const req = app.predict("/predict", [url]);
+
+        const result = await Promise.race([req, timeout]);
+
+        document.getElementById("log").innerText =
+            JSON.stringify(result, null, 2);
+
+        document.getElementById("status").innerText = "成功";
+
+        if (result?.data?.[1]?.url) {
+            document.getElementById("img").src = result.data[1].url;
         }
-    },
 
-    methods: {
-        async testAPI() {
-
-            if (!this.client) {
-                this.message = "尚未連線";
-                return;
-            }
-
-            this.status = "processing";
-
-            // 🚀 不再卡住 UI
-            this.message = "送出請求...";
-
-            await new Promise(r => setTimeout(r, 200));
-
-            this.message = "AI 排隊中...";
-
-            let result;
-
-            try {
-                const start = performance.now();
-
-                result = await this.client.predict("/predict", [
-                    this.url
-                ]);
-
-                const time = ((performance.now() - start) / 1000).toFixed(2);
-
-                this.message = `AI 完成（${time}s）`;
-
-                if (result?.data?.[1]?.url) {
-                    this.img = result.data[1].url;
-                }
-
-                this.status = "done";
-
-            } catch (err) {
-                console.error(err);
-                this.status = "error";
-                this.message = "API 失敗";
-            }
-        }
+    } catch (e) {
+        document.getElementById("status").innerText = "error";
+        document.getElementById("step").innerText = "失敗：" + e.message;
+        document.getElementById("log").innerText = String(e);
     }
-}).mount("#app");
+};
+
+window.reset = function () {
+    document.getElementById("status").innerText = "狀態：reset";
+    document.getElementById("step").innerText = "-";
+    document.getElementById("log").innerText = "";
+    document.getElementById("img").src = "";
+};
 </script>
 
 </body>
