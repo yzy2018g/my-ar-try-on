@@ -1,47 +1,62 @@
 const BASE = "https://michaelyo-my-ar-cloth-api.hf.space";
 
 /* =========================
-   1️⃣ UPLOAD IMAGE (手機穩定版)
+   🔥 1. UPLOAD (100% safe)
 ========================= */
 export async function uploadImage(file) {
 
     const formData = new FormData();
     formData.append("files", file);
 
+    console.log("UPLOAD START");
+
     const res = await fetch(`${BASE}/gradio_api/upload`, {
         method: "POST",
         body: formData
     });
 
-    const text = await res.text(); // ⚠️ 手機避免 json crash
+    const text = await res.text();
 
-    console.log("UPLOAD RAW:", text);
+    console.log("UPLOAD RAW TEXT:", text);
 
     let data;
     try {
         data = JSON.parse(text);
     } catch (e) {
-        throw new Error("UPLOAD JSON parse failed: " + text);
+        throw new Error("UPLOAD NOT JSON: " + text);
     }
 
-    // ✅ 兼容多種回傳格式
-    const path =
-        Array.isArray(data) ? data[0] :
-        data?.[0] ||
-        data?.files?.[0] ||
-        data?.path;
+    // 🧠 超寬鬆解析（手機必備）
+    let path = null;
+
+    if (Array.isArray(data)) {
+        path = data[0];
+    } else if (typeof data === "string") {
+        path = data;
+    } else if (data?.[0]) {
+        path = data[0];
+    } else if (data?.files?.[0]) {
+        path = data.files[0];
+    } else if (data?.path) {
+        path = data.path;
+    }
+
+    console.log("UPLOAD PARSED PATH:", path);
 
     if (!path) {
-        throw new Error("UPLOAD failed: no file path");
+        throw new Error("UPLOAD FAILED: no path");
     }
 
     return path;
 }
 
 /* =========================
-   2️⃣ RUN TRY ON
+   🔥 2. RUN MODEL
+   ⚠️ 先用最簡版本避免炸
 ========================= */
 export async function runTryOn(personPath) {
+
+    console.log("RUN TRYON START");
 
     const res = await fetch(`${BASE}/gradio_api/call/v2/predict`, {
         method: "POST",
@@ -58,23 +73,27 @@ export async function runTryOn(personPath) {
 
     const data = await res.json();
 
-    console.log("RUN TRYON RAW:", data);
+    console.log("RUN RAW:", data);
 
-    if (!data?.event_id) {
-        throw new Error("No event_id from API");
+    if (!data || !data.event_id) {
+        throw new Error("NO event_id");
     }
 
     return data.event_id;
 }
 
 /* =========================
-   3️⃣ GET RESULT (SSE safe)
+   🔥 3. GET RESULT (SSE SAFE)
 ========================= */
 export async function getResult(eventId) {
 
-    const res = await fetch(
-        `${BASE}/gradio_api/call/predict/${eventId}`
-    );
+    console.log("GET RESULT START");
+
+    const res = await fetch(`${BASE}/gradio_api/call/predict/${eventId}`);
+
+    if (!res.body) {
+        throw new Error("NO STREAM BODY (mobile issue)");
+    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
