@@ -1,0 +1,106 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    background: #222;
+    color: white;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+/* 衣服預覽 */
+
+.preview-box {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 5px;
+}
+
+.preview-box img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border: 2px solid #fff;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: 0.2s;
+}
+
+.preview-box img.active {
+    border-color: #00ffcc;
+    transform: scale(1.05);
+}
+
+/* AR 視窗 */
+
+.view-panel {
+    position: relative;
+    width: 100%;
+    max-width: 640px;
+    aspect-ratio: 4 / 3;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+video,
+canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+canvas {
+    z-index: 10;
+    pointer-events: none;
+}
+
+video {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* 狀態列 */
+
+.loading {
+    display: none;
+    color: #00ffcc;
+    font-weight: bold;
+    margin: 5px 0;
+}
+
+.status-bar {
+    color: #fff;
+    background: #333;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    margin-bottom: 10px;
+    min-height: 20px;
+    word-break: break-all;
+    border: 1px solid #555;
+}
+
+/* 啟動按鈕 */
+
+.start-btn {
+    padding: 12px 24px;
+    font-size: 16px;
+    background: #00ffcc;
+    color: #222;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
