@@ -1,3 +1,4 @@
+import { uploadImage, runTryOn, getResult } from "./api.js";
 import { startCamera } from "./camera.js";
 import { initPose } from "./pose.js";
 import { setStatus, showLoading, hideLoading } from "./ui.js";
@@ -7,16 +8,6 @@ import { drawAR } from "./renderer.js";
 window.appLoaded = true;
 console.log("APP LOADED OK");
 
-/* =========================
-   API
-========================= */
-function getAPI() {
-    return {
-        uploadImage: window.uploadImage,
-        runTryOn: window.runTryOn,
-        getResult: window.getResult
-    };
-}
 
 /* =========================
    DOM
