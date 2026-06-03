@@ -20,6 +20,7 @@ function getAPI() {
 import { startCamera } from "./camera.js";
 import { initPose } from "./pose.js";
 import { setStatus, showLoading, hideLoading } from "./ui.js";
+import "./api.js";
 
 /* =========================
    DEBUG SYSTEM (SAFE MOBILE)
