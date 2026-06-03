@@ -87,6 +87,8 @@
         </div>
 
         <div id="loadingStatus" class="loading">後端 AI 去背處理中...請稍候...</div>
+        <div id="debugStatus" style="color: #ffcc00; font-weight: bold; margin-top: 5px;">等待 MediaPipe 啟動...</div>
+
 
         <div class="view-panel">
             <video id="webcam" autoplay playsinline muted></video>
@@ -132,14 +134,20 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             if (results.poseLandmarks) {
-                console.log("✅ 成功抓到骨架！肩膀座標為：", results.poseLandmarks[11]); // 如果有這行，代表 AI 有在跑
+                // 直接顯示在網頁畫面上
+                debugStatus.innerHTML = `✅ 成功抓到骨架！肩膀 X: ${results.poseLandmarks[11].x.toFixed(2)}`;
+                debugStatus.style.color = "#00ffcc"; // 變成綠色
+                
                 currentLandmarks = results.poseLandmarks;
                 // 如果衣服去背好了，就執行 AR 渲染
                 if (isClothLoaded) {
                     renderARClothing();
                 }
             } else {
-                console.log("❌ 畫面中沒有偵測到人體");
+                // 直接顯示在網頁畫面上
+                debugStatus.innerHTML = "❌ 畫面中沒有偵測到人體，請站遠一點露出雙肩";
+                debugStatus.style.color = "#ff3333"; // 變成紅色
+                
                 currentLandmarks = null;
             }
         });
