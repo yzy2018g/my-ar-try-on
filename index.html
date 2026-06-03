@@ -3,92 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR 虛擬試衣間</title>
+    <title>AR 智慧動態試衣間</title>
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            text-align: center; 
-            background: #222; 
-            color: white; 
-            margin: 0; 
-            padding: 20px; 
-        }
-        .container { 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            gap: 15px; 
-        }
-        .preview-box { 
-            display: flex; 
-            gap: 10px; 
-            margin-bottom: 10px; 
-        }
-        .preview-box img { 
-            width: 80px; 
-            height: 80px; 
-            object-fit: cover; 
-            border: 2px solid #fff; 
-            cursor: pointer; 
-            border-radius: 8px; 
-            transition: border 0.2s ease;
-        }
-        .preview-box img.active { 
-            border-color: #00ffcc; 
-        }
-        .view-panel { 
-            position: relative; 
-            width: 100%; 
-            max-width: 640px; 
-            aspect-ratio: 4/3; 
-            background: #000; 
-            border-radius: 12px; 
-            overflow: hidden; 
-        }
-        video, canvas { 
-            position: absolute; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%; 
-            object-fit: cover; 
-        }
-        /* 將相機鏡頭水平翻轉，符合一般照鏡子習慣 */
-        #webcam {
-            transform: scaleX(-1);
-        }
-        /* Canvas 用來畫衣服，必須疊在 Video 上，且不阻擋滑鼠點擊 */
-        canvas { 
-            z-index: 10; 
-            pointer-events: none; 
-            transform: scaleX(-1); /* Canvas 也要一起翻轉鏡像 */
-        } 
-        .loading { 
-            display: none; 
-            color: #00ffcc; 
-            font-weight: bold; 
-            font-size: 1.1em;
-        }
+        body { font-family: Arial, sans-serif; text-align: center; background: #222; color: white; margin: 0; padding: 20px; }
+        .container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        .preview-box { display: flex; gap: 10px; margin-bottom: 10px; }
+        .preview-box img { width: 80px; height: 80px; object-fit: cover; border: 2px solid #fff; cursor: pointer; border-radius: 8px; }
+        .preview-box img.active { border-color: #00ffcc; }
+        .view-panel { position: relative; width: 100%; max-width: 640px; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; }
+        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        canvas { z-index: 10; pointer-events: none; }
+        .loading { display: none; color: #00ffcc; font-weight: bold; margin-bottom: 5px; }
+        .status-bar { color: #aaa; font-size: 14px; margin-bottom: 10px; }
     </style>
 
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm/vision_bundle.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
-    <h1>AR 虛擬試衣間</h1>
+    <h1>AR 智慧動態試衣間</h1>
+    <div class="status-bar" id="sysStatus">系統初始化中（正在載入 AI 骨骼追蹤模型）...</div>
     
     <div class="container">
         <div class="preview-box">
-            <img src="cloth.png" alt="預覽1" onclick="selectCloth('cloth.png', this)">
-            <img src="style_1.png" alt="預覽2" onclick="selectCloth('style_1.png', this)">
-            <img src="style_2.png" alt="預覽3" onclick="selectCloth('style_2.png', this)">
+            <img src="cloth.png" alt="預覽1" crossorigin="anonymous" onclick="selectCloth('cloth.png', this)">
+            <img src="style_1.png" alt="預覽2" crossorigin="anonymous" onclick="selectCloth('style_1.png', this)">
+            <img src="style_2.png" alt="預覽3" crossorigin="anonymous" onclick="selectCloth('style_2.png', this)">
         </div>
 
         <div id="loadingStatus" class="loading">後端 AI 去背處理中...請稍候...</div>
-        <div id="debugStatus" style="color: #ffcc00; font-weight: bold; margin-top: 5px;">等待 MediaPipe 啟動...</div>
-
 
         <div class="view-panel">
             <video id="webcam" autoplay playsinline muted></video>
@@ -96,93 +39,65 @@
         </div>
     </div>
 
-    <script type="module">
-    import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1/dist/index.min.js";
-    import { Pose } from "https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js";
+<script type="module">
+    import { Client, handle_file } from "https://cdn.jsdelivr.net/npm/@gradio/client@1/dist/index.min.js";
 
-    // 注意：這裡我們不再 import Camera 工具，改用原生 WebRTC
+    // 取得 MediaPipe 的 Pose 偵測類別
+    const { PoseLandmarker, FilesetResolver } = vision;
 
     const video = document.getElementById('webcam');
     const canvas = document.getElementById('arCanvas');
     const ctx = canvas.getContext('2d');
     const loadingStatus = document.getElementById('loadingStatus');
+    const sysStatus = document.getElementById('sysStatus');
     
+    let poseLandmarker = undefined;
     let currentClothingImage = new Image(); 
     let isClothLoaded = false;
-    let currentLandmarks = null; 
-    let isCameraPlaying = false;
+    let lastVideoTime = -1;
 
-    // ==========================================
-    // 1. 初始化 MediaPipe Pose 身體追蹤
-    // ==========================================
-    // 修正後：強制指定 0.5.1675194473 穩定版，並使用完整的 jsDelivr 絕對路徑
-    const pose = new Pose({
-        locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675194473/${file}`;
+    // 1. 初始化 MediaPipe 人體姿態偵測器
+    async function initPoseLandmarker() {
+        try {
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
+            );
+            poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full.task`,
+                    delegate: "GPU"
+                },
+                runningMode: "VIDEO",
+                outputSegmentationMasks: false
+            });
+            sysStatus.textContent = "AI 骨骼模型載入成功！請點擊上方衣服試穿。";
+            setupCamera();
+        } catch (err) {
+            sysStatus.textContent = "AI 模型載入失敗，請重新整理網頁。";
+            console.error(err);
         }
-     });
+    }
 
-
-    pose.setOptions({
-        modelComplexity: 1,      
-        smoothLandmarks: true,   
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-    });
-
-    // 監聽 AI 骨架偵測結果
-    pose.onResults((results) => {
-        // 每當 MediaPipe 算完一影格，就清除畫布並重新渲染 AR 衣服
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (results.poseLandmarks) {
-            currentLandmarks = results.poseLandmarks;
-            if (isClothLoaded) {
-                renderARClothing();
-            }
-        } else {
-            currentLandmarks = null;
-        }
-    });
-
-    // ==========================================
-    // 2. 改用「純原生」相機啟動與影像循環送遞
-    // ==========================================
+    // 2. 初始化相機
     async function setupCamera() {
         try {
-            // 啟動相機（只啟動這一次）
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: "user", width: 640, height: 480 }, 
                 audio: false 
             });
             video.srcObject = stream;
-            
-            video.addEventListener('loadedmetadata', () => {
+            video.addEventListener('loadeddata', () => {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
-                isCameraPlaying = true;
-                
-                // 啟動原生追蹤迴圈
-                trackFrame();
+                requestAnimationFrame(renderLoop);
             });
         } catch (err) {
-            alert("相機啟動失敗，請重新整理網頁並檢查權限。");
-            console.error("相機詳細錯誤:", err);
+            alert("無法開啟相機，請確保使用 HTTPS 環境或 localhost 測試。");
+            console.error(err);
         }
     }
 
-    // 利用瀏覽器的重繪機制，源源不絕地把畫面送給 MediaPipe
-    async function trackFrame() {
-        if (isCameraPlaying && video.readyState === video.HAVE_ENOUGH_DATA) {
-            // 原生送影格給 MediaPipe 運算，避開官方 Camera 的硬體鎖衝突
-            await pose.send({ image: video });
-        }
-        // 繼續追蹤下一幀
-        requestAnimationFrame(trackFrame);
-    }
-
-    // ==========================================
-    // 3. 選擇衣服並送去 Hugging Face 去背
-    // ==========================================
+    // 3. 呼叫 Gradio API 去背
     window.selectCloth = async function(imgSrc, element) {
         document.querySelectorAll('.preview-box img').forEach(img => img.classList.remove('active'));
         element.classList.add('active');
@@ -194,12 +109,15 @@
         try {
             const response = await fetch(imgSrc);
             const blob = await response.blob();
+            const fileData = await handle_file(blob);
 
-            const app = await Client.connect("https://michaelyo-my-ar-cloth-api.hf.space");
-            const result = await app.predict("/predict", { input_image: blob });
+            const app = await Client.connect("michaelyo/my-ar-cloth-api");
+            const result = await app.predict("/predict", { input_image: fileData });
 
             if (result.data && result.data[0]) {
                 const dataObj = result.data[0];
+                currentClothingImage.crossOrigin = "anonymous"; 
+
                 if (dataObj && typeof dataObj === 'object' && dataObj.url) {
                     currentClothingImage.src = dataObj.url;
                 } else if (typeof dataObj === 'string') {
@@ -212,61 +130,80 @@
                 };
             }
         } catch (error) {
-            console.error("詳細錯誤訊息:", error);
+            console.error(error);
             loadingStatus.textContent = "AI 處理失敗：" + error.message;
         }
     }
 
-    // ==========================================
-    // 4. 動態運算與旋轉縮放（貼身渲染）
-    // ==========================================
-    function renderARClothing() {
-        if (!currentLandmarks) return;
+    // 4. 動態計算位置並渲染迴圈
+    function renderLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        let landmarks = null;
 
-        const leftShoulder = currentLandmarks[11];
-        const rightShoulder = currentLandmarks[12];
-
-        if (leftShoulder.visibility < 0.5 || rightShoulder.visibility < 0.5) {
-            return;
+        // 如果 AI 骨骼模型準備好了，且視訊有新影格
+        if (poseLandmarker && video.currentTime !== lastVideoTime) {
+            lastVideoTime = video.currentTime;
+            const startTimeMs = performance.now();
+            const results = poseLandmarker.detectForVideo(video, startTimeMs);
+            
+            if (results.landmarks && results.landmarks.length > 0) {
+                landmarks = results.landmarks[0]; // 抓取第一個偵測到的人
+            }
         }
 
-        const xL = leftShoulder.x * canvas.width;
-        const yL = leftShoulder.y * canvas.height;
-        const xR = rightShoulder.x * canvas.width;
-        const yR = rightShoulder.y * canvas.height;
+        // 如果成功抓到人體，且衣服已去背完成
+        if (isClothLoaded && landmarks) {
+            // MediaPipe 關鍵點定義：11 是左肩 (Left Shoulder), 12 是右肩 (Right Shoulder)
+            // 註：因為鏡頭是鏡像，畫面上左邊通常是人的右肩，這裡依實際座標計算
+            const leftShoulder = landmarks[11];
+            const rightShoulder = landmarks[12];
 
-        const midX = (xL + xR) / 2;
-        const midY = (yL + yR) / 2;
+            // 1. 將正規化座標 (0~1) 轉換成實際畫布像素座標
+            const lx = leftShoulder.x * canvas.width;
+            const ly = leftShoulder.y * canvas.height;
+            const rx = rightShoulder.x * canvas.width;
+            const ry = rightShoulder.y * canvas.height;
 
-        const dx = xL - xR;
-        const dy = yL - yR;
-        const shoulderDistance = Math.sqrt(dx * dx + dy * dy);
+            // 2. 計算兩肩中點（作為衣服領口的中心掛載點）
+            const midX = (lx + rx) / 2;
+            const midY = (ly + ry) / 2;
 
-        const clothWidth = shoulderDistance * 2.0; 
-        const clothHeight = clothWidth * (currentClothingImage.height / currentClothingImage.width);
+            // 3. 計算肩膀寬度，並依據寬度等比例放大衣服 (乘以 2.0 左右讓衣服能蓋住身體)
+            const shoulderWidth = Math.sqrt(Math.pow(lx - rx, 2) + Math.pow(ly - ry, 2));
+            const clothWidth = shoulderWidth * 2.1; 
+            const imgScale = currentClothingImage.naturalHeight / currentClothingImage.naturalWidth;
+            const clothHeight = clothWidth * imgScale;
 
-        const angle = Math.atan2(dy, dx);
+            // 4. 計算身體傾斜角度，讓衣服跟著肩膀一起轉動
+            const angle = Math.atan2(ly - ry, lx - rx);
 
-        ctx.save();
-        ctx.translate(midX, midY); 
-        ctx.rotate(angle);         
-        
-        const offsetY = - (clothHeight * 0.15); 
-        
-        ctx.drawImage(
-            currentClothingImage, 
-            -(clothWidth / 2),  
-            offsetY,            
-            clothWidth, 
-            clothHeight
-        );
-        
-        ctx.restore(); 
+            // 5. 繪製動態衣服（使用 Canvas Matrix 進行位移與旋轉）
+            ctx.save();
+            ctx.translate(midX, midY + (clothHeight * 0.15)); // 微調下移，讓領口對準脖子
+            ctx.rotate(angle);
+            
+            // 將置中點移到衣服正中央上方進行繪製
+            ctx.drawImage(
+                currentClothingImage, 
+                -clothWidth / 2, 
+                -clothHeight * 0.1, // 讓旋轉中心靠近衣服領口
+                clothWidth, 
+                clothHeight
+            );
+            ctx.restore();
+            
+            sysStatus.textContent = "✨ 已成功將衣服套在您的身上！";
+        } else if (isClothLoaded && !landmarks) {
+            sysStatus.textContent = "👋 請退後一點，讓鏡頭拍到您的雙肩。";
+        }
+
+        requestAnimationFrame(renderLoop);
     }
 
-    // 啟動相機
-    setupCamera();
+    // 啟動 AI 初始化
+    initPoseLandmarker();
 </script>
-
+    
 </body>
 </html>
