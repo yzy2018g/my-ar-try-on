@@ -3,7 +3,7 @@ console.log("APP LOADED OK");
 
 import { startCamera } from "./camera.js";
 import { initPose } from "./pose.js";
-import { removeBackground } from "./api.js";
+import { uploadImage, runTryOn, getResult } from "./api.js";
 import { setStatus, showLoading, hideLoading } from "./ui.js";
 
 /* =========================
@@ -24,7 +24,7 @@ function led(id, ok) {
 window.log = log;
 
 /* =========================
-   DOM（只做一次）
+   DOM
 ========================= */
 const video = document.getElementById("webcam");
 const canvas = document.getElementById("arCanvas");
@@ -63,7 +63,25 @@ startBtn.addEventListener("click", async () => {
 });
 
 /* =========================
-   CLOTH SELECT
+   CAPTURE FRAME (person image)
+========================= */
+function captureFrame(video) {
+    const c = document.createElement("canvas");
+    c.width = video.videoWidth;
+    c.height = video.videoHeight;
+
+    const ctx = c.getContext("2d");
+    ctx.drawImage(video, 0, 0);
+
+    return new Promise(resolve => {
+        c.toBlob(blob => {
+            resolve(new File([blob], "person.jpg", { type: "image/jpeg" }));
+        }, "image/jpeg");
+    });
+}
+
+/* =========================
+   CLOTH SELECT + AI TRY-ON
 ========================= */
 window.selectCloth = async function (src, el) {
 
@@ -74,41 +92,56 @@ window.selectCloth = async function (src, el) {
         .forEach(i => i.classList.remove("active"));
     el.classList.add("active");
 
-    showLoading("AI 去背中...");
+    showLoading("AI 試衣中...");
 
     try {
+        /* 1️⃣ load cloth image */
         const res = await fetch(src);
         const blob = await res.blob();
-        const file = new File([blob], src, { type: blob.type });
+        const clothFile = new File([blob], "cloth.jpg", { type: blob.type });
 
-        const result = await removeBackground(file);
+        /* 2️⃣ capture person */
+        const personFile = await captureFrame(video);
 
-        const url = result.data?.[0]?.url || result.data?.[0];
+        /* 3️⃣ upload both */
+        const personPath = await uploadImage(personFile);
+        const clothPath = await uploadImage(clothFile);
 
+        /* 4️⃣ run AI model */
+        const eventId = await runTryOn(personPath, clothPath);
+
+        /* 5️⃣ get result */
+        const rawResult = await getResult(eventId);
+
+        log("RAW RESULT: " + rawResult);
+
+        /* 6️⃣ parse result */
+        const jsonMatch = rawResult.match(/\{.*\}/s);
+        const data = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+
+        const url = data?.url || data?.data?.[0];
+
+        if (!url) throw new Error("No output image url");
+
+        /* 7️⃣ render cloth */
         cloth.crossOrigin = "anonymous";
         cloth.src = url;
 
         cloth.onload = () => {
             clothReady = true;
             hideLoading();
-            setStatus(pose ? "試穿成功 ✓" : "試穿成功（無骨架模式）");
+            led("led-api", true);
+            setStatus("AI 試衣成功 ✓");
         };
 
     } catch (err) {
+        console.error(err);
+        log("ERROR: " + err.message);
 
-    log("ERROR:");
-    log(err.message);
-
-    if (err.stack) {
-        log(err.stack);
+        hideLoading();
+        led("led-api", false);
+        setStatus("❌ AI 試衣失敗：" + err.message);
     }
-
-    console.error(err);
-
-    hideLoading();
-
-    setStatus("❌ 去背失敗：" + err.message);
-}
 };
 
 /* =========================
@@ -116,9 +149,9 @@ window.selectCloth = async function (src, el) {
 ========================= */
 function loop() {
 
-   led("led-render", true);
-   
-   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    led("led-render", true);
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     let lm = null;
 
