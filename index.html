@@ -109,8 +109,14 @@
         // ==========================================
         // 1. 初始化 MediaPipe Pose 身體追蹤
         // ==========================================
-        const pose = new Pose({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+        //const pose = new Pose({
+        //    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+        //});
+        // 修改為明確指定版本號（例如 0.5.1675194473 穩定版），防止被 CDN 導向錯誤路徑：
+        const pose = new window.Pose({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675194473/${file}`;
+            }
         });
 
         pose.setOptions({
