@@ -95,10 +95,20 @@ window.selectCloth = async function (src, el) {
         };
 
     } catch (err) {
-        console.error(err);
-        hideLoading();
-        setStatus("❌ 去背失敗：" + err.message);
+
+    log("ERROR:");
+    log(err.message);
+
+    if (err.stack) {
+        log(err.stack);
     }
+
+    console.error(err);
+
+    hideLoading();
+
+    setStatus("❌ 去背失敗：" + err.message);
+}
 };
 
 /* =========================
