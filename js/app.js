@@ -1,68 +1,30 @@
+import { startCamera } from "./camera.js";
+import { initPose } from "./pose.js";
+import { setStatus, showLoading, hideLoading } from "./ui.js";
+import { log, step, error, led, safeGetEl } from "./debug.js";
+import { drawAR } from "./renderer.js";
+
 window.appLoaded = true;
 console.log("APP LOADED OK");
 
 /* =========================
-   SAFE API LAYER (核心修復)
+   API
 ========================= */
 function getAPI() {
-    const api = window;
-
     return {
-        uploadImage: api.uploadImage,
-        runTryOn: api.runTryOn,
-        getResult: api.getResult
+        uploadImage: window.uploadImage,
+        runTryOn: window.runTryOn,
+        getResult: window.getResult
     };
 }
 
 /* =========================
-   IMPORT UI / AI
+   DOM
 ========================= */
-import { startCamera } from "./camera.js";
-import { initPose } from "./pose.js";
-import { setStatus, showLoading, hideLoading } from "./ui.js";
-import "./api.js";
-
-/* =========================
-   DEBUG SYSTEM (SAFE MOBILE)
-========================= */
-function safeGet(id) {
-    return document.getElementById(id);
-}
-
-function log(msg) {
-    console.log(msg);
-
-    const box = safeGet("debugBox");
-    if (box) {
-        box.innerText += "\n" + msg;
-        box.scrollTop = box.scrollHeight;
-    }
-}
-
-function step(tag, msg) {
-    log(`👉 ${tag}: ${msg}`);
-}
-
-function error(tag, msg) {
-    log(`❌ ${tag}: ${msg}`);
-    console.error(tag, msg);
-}
-
-function led(id, ok) {
-    const el = safeGet(id);
-    if (!el) return;
-
-    const base = el.innerText?.split(":")[0] || id;
-    el.innerText = `${base}: ${ok ? "🟢" : "🔴"}`;
-}
-
-/* =========================
-   DOM INIT (SAFE)
-========================= */
-const video = safeGet("webcam");
-const canvas = safeGet("arCanvas");
-const ctx = canvas ? canvas.getContext("2d") : null;
-const startBtn = safeGet("startBtn");
+const video = safeGetEl("webcam");
+const canvas = safeGetEl("arCanvas");
+const ctx = canvas?.getContext("2d");
+const startBtn = safeGetEl("startBtn");
 
 /* =========================
    STATE
@@ -73,51 +35,42 @@ let clothReady = false;
 let isProcessing = false;
 
 /* =========================
-   START SYSTEM
+   START
 ========================= */
-if (startBtn) {
-    startBtn.addEventListener("click", async () => {
+startBtn?.addEventListener("click", async () => {
 
-        step("CLICK", "OK");
+    step("CLICK", "OK");
 
-        startBtn.style.display = "none";
-        setStatus("初始化 AI 模型...");
+    startBtn.style.display = "none";
+    setStatus("初始化 AI 模型...");
 
-        try {
-            pose = await initPose();
-            led("led-pose", true);
-            step("POSE", "OK");
+    try {
+        pose = await initPose();
+        led("led-pose", true);
 
-            await startCamera(video);
-            led("led-camera", true);
-            step("CAMERA", "OK");
+        await startCamera(video);
+        led("led-camera", true);
 
-            if (video && canvas) {
-                canvas.width = video.videoWidth || 640;
-                canvas.height = video.videoHeight || 480;
-            }
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
 
-            setStatus("系統就緒 ✓");
-            step("SYSTEM", "READY");
+        setStatus("系統就緒 ✓");
+        step("SYSTEM", "READY");
 
-            loop();
+        drawAR({ ctx, video, canvas, pose, cloth, clothReady });
 
-        } catch (err) {
-            error("INIT", err.message);
-        }
-    });
-}
+    } catch (err) {
+        error("INIT", err.message);
+    }
+});
 
 /* =========================
-   CAPTURE FRAME
+   CAPTURE
 ========================= */
 function captureFrame(video) {
-
-    if (!video) throw new Error("NO VIDEO");
-
     const c = document.createElement("canvas");
-    c.width = video.videoWidth || 640;
-    c.height = video.videoHeight || 480;
+    c.width = video.videoWidth;
+    c.height = video.videoHeight;
 
     const cctx = c.getContext("2d");
     cctx.drawImage(video, 0, 0);
@@ -130,7 +83,7 @@ function captureFrame(video) {
 }
 
 /* =========================
-   CLOTH SELECT + API FLOW (FIXED)
+   SELECT CLOTH
 ========================= */
 window.selectCloth = async function (src, el) {
 
@@ -145,79 +98,25 @@ window.selectCloth = async function (src, el) {
     led("led-api", false);
 
     try {
-
-        /* SAFE UI */
-        const items = document.querySelectorAll(".preview-box img");
-        items?.forEach?.(i => i.classList.remove("active"));
-
-        el?.classList?.add("active");
-
-        showLoading("AI 試衣中...");
-
-        /* STEP 1 */
-        step("STEP 1", "load cloth");
+        const api = getAPI();
 
         const res = await fetch(src);
         const blob = await res.blob();
         const clothFile = new File([blob], "cloth.jpg", { type: blob.type });
 
-        /* STEP 2 */
-        step("STEP 2", "capture person");
-
         const personFile = await captureFrame(video);
 
-        /* GET API (IMPORTANT FIX) */
-        const api = getAPI();
-
-        if (!api.uploadImage || !api.runTryOn || !api.getResult) {
-            throw new Error("API not ready (window missing functions)");
-        }
-
-        /* STEP 3 */
-        step("STEP 3", "upload person");
-
         const personPath = await api.uploadImage(personFile);
-        step("PERSON", personPath || "NULL");
-
-        if (!personPath) throw new Error("person upload failed");
-
-        /* STEP 4 */
-        step("STEP 4", "upload cloth");
-
         const clothPath = await api.uploadImage(clothFile);
-        step("CLOTH", clothPath || "NULL");
-
-        if (!clothPath) throw new Error("cloth upload failed");
-
-        /* STEP 5 */
-        step("STEP 5", "run AI");
 
         const eventId = await api.runTryOn(personPath);
-        step("EVENT", eventId || "NULL");
 
-        if (!eventId) throw new Error("no eventId");
+        const raw = await api.getResult(eventId);
 
-        /* STEP 6 */
-        step("STEP 6", "get result");
-
-        const rawResult = await api.getResult(eventId);
-        step("RAW", rawResult ? "OK" : "NULL");
-
-        /* STEP 7 */
-        step("STEP 7", "parse result");
-
-        let data = null;
-
-        try {
-            const match = rawResult?.match(/\{.*\}/s);
-            data = match ? JSON.parse(match[0]) : null;
-        } catch (e) {
-            error("PARSE", e.message);
-        }
+        const match = raw?.match(/\{.*\}/s);
+        const data = match ? JSON.parse(match[0]) : null;
 
         const url = data?.url || data?.data?.[0];
-
-        if (!url) throw new Error("no image url");
 
         cloth.crossOrigin = "anonymous";
         cloth.src = url;
@@ -226,68 +125,13 @@ window.selectCloth = async function (src, el) {
             clothReady = true;
             hideLoading();
             led("led-api", true);
-            step("SUCCESS", "DONE");
             setStatus("AI 試衣成功 ✓");
         };
 
-    } catch (err) {
-        error("API FLOW", err.message);
+    } catch (e) {
+        error("FLOW", e.message);
         hideLoading();
-        led("led-api", false);
-        setStatus("❌ " + err.message);
-
-    } finally {
-        isProcessing = false;
     }
+
+    isProcessing = false;
 };
-
-/* =========================
-   RENDER LOOP
-========================= */
-function loop() {
-
-    if (!ctx || !video) return;
-
-    led("led-render", true);
-
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    let lm = null;
-
-    if (pose && video.readyState >= 2) {
-        try {
-            const res = pose.detectForVideo(video, performance.now());
-            lm = res.landmarks?.[0] || null;
-        } catch (e) {}
-    }
-
-    if (clothReady && lm) {
-
-        const l = lm[11];
-        const r = lm[12];
-
-        const lx = l.x * canvas.width;
-        const ly = l.y * canvas.height;
-        const rx = r.x * canvas.width;
-        const ry = r.y * canvas.height;
-
-        const midX = (lx + rx) / 2;
-        const midY = (ly + ry) / 2;
-
-        const shoulder = Math.hypot(lx - rx, ly - ry);
-
-        const width = shoulder * 2.1;
-        const ratio = cloth.naturalHeight / cloth.naturalWidth;
-        const height = width * ratio;
-
-        const angle = Math.atan2(ly - ry, lx - rx);
-
-        ctx.save();
-        ctx.translate(midX, midY + height * 0.12);
-        ctx.rotate(angle);
-        ctx.drawImage(cloth, -width / 2, -height * 0.08, width, height);
-        ctx.restore();
-    }
-
-    requestAnimationFrame(loop);
-}
