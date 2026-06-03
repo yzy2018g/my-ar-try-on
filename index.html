@@ -17,13 +17,29 @@
 <button id="startBtn">啟動</button>
 
 <div id="debugBox" style="
-    background:#111;
-    color:#00ffcc;
-    padding:10px;
-    margin:10px;
-    font-size:14px;
-    white-space:pre-wrap;
-"></div>
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: #000;
+    color: #00ffcc;
+    font-size: 12px;
+    padding: 8px;
+    z-index: 99999;
+    white-space: pre-wrap;
+    max-height: 40vh;
+    overflow: auto;
+">
+🔵 DEBUG START\n
+</div>
+
+<div style="position:fixed;bottom:10px;left:10px;z-index:99999;color:white;font-size:12px">
+    <div id="led-js">JS: ⬛</div>
+    <div id="led-camera">CAMERA: ⬛</div>
+    <div id="led-pose">POSE: ⬛</div>
+    <div id="led-api">API: ⬛</div>
+    <div id="led-render">RENDER: ⬛</div>
+</div>
 
 <div id="sysStatus">等待 JS 載入...</div>
 
