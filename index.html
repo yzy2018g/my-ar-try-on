@@ -69,7 +69,7 @@
     // 後端預測接口網址
     const HF_API_URL = "https://michaelyo-my-ar-cloth-api.hf.space/api/predict";
 
-    // 點擊啟動系統（突破 iOS / Android 手機自動播放安全防禦）
+    // 點擊啟動系統
     startBtn.addEventListener('click', async () => {
         startBtn.style.display = 'none';
         sysStatus.textContent = "正在檢查並載入 AI 骨骼追蹤模型...";
@@ -80,7 +80,7 @@
     async function initPoseLandmarker() {
         try {
             if (!window.vision) {
-                throw new Error("網頁未能成功載入 MediaPipe 核心腳本，請確認網路連線。");
+                throw new Error("網頁未能成功載入 MediaPipe 核心腳本。");
             }
 
             const { PoseLandmarker, FilesetResolver } = window.vision;
@@ -88,9 +88,10 @@
                 "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
             );
             
+            // 🛑 關鍵修正：將 modelAssetPath 改為 pose_landmarker_lite.task (大小僅 3MB，更適合手機與網頁端)
             poseLandmarker = await PoseLandmarker.createFromOptions(visionResolver, {
                 baseOptions: {
-                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full.task`,
+                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite.task`,
                     delegate: "GPU"
                 },
                 runningMode: "VIDEO",
@@ -142,15 +143,15 @@
 
             video.addEventListener('loadedmetadata', triggerRender);
             video.addEventListener('loadeddata', triggerRender);
-            setTimeout(triggerRender, 1200); // 兜底機制
+            setTimeout(triggerRender, 1200); 
 
         } catch (err) {
-            sysStatus.textContent = "❌ 無法獲取相機權限：" + err.message + "。請檢查手機系統設定。";
+            sysStatus.textContent = "❌ 無法獲獲相機權限：" + err.message;
             console.error(err);
         }
     }
 
-    // 💡 輔助函式：將本地 Blob 轉成純前端 Base64 字串
+    // 輔助函式：將本地 Blob 轉成 Base64 字串
     function blobToBase64(blob) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -160,7 +161,7 @@
         });
     }
 
-    // 3. 點擊圖片：使用純原生 Base64 封裝發送，拒絕使用 Gradio Uploader 端點
+    // 3. 點擊圖片：Base64 傳送給後端
     window.selectCloth = async function(imgSrc, element) {
         document.querySelectorAll('.preview-box img').forEach(img => img.classList.remove('active'));
         element.classList.add('active');
@@ -170,19 +171,17 @@
         isClothLoaded = false;
 
         try {
-            // A. 讀取本地同目錄下的圖片並轉成 Base64
             sysStatus.textContent = "正在編碼服裝影像資料...";
             const response = await fetch(imgSrc);
             const blob = await response.blob();
             const base64Data = await blobToBase64(blob);
 
-            // B. 用標準 POST 將 JSON 餵給 Gradio 的 /api/predict 接口
             sysStatus.textContent = "後端 AI 正在全力運算中（去背與模特兒肢體消除）...";
             const predictResponse = await fetch(HF_API_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    data: [ base64Data ] // 直接以 Base64 字串作為圖像輸入
+                    data: [ base64Data ] 
                 })
             });
             
@@ -191,13 +190,10 @@
             }
 
             const result = await predictResponse.json();
-            console.log("後端 Base64 預測回傳:", result);
+            console.log("後端 Base64 回傳:", result);
 
-            // C. 解析去背回傳後的處理資料
             if (result.data && result.data[0]) {
                 const dataObj = result.data[0];
-                
-                // 設定解鎖跨域，避免後端 URL 圖片污染畫布
                 currentClothingImage.crossOrigin = "anonymous"; 
 
                 if (dataObj && typeof dataObj === 'object' && dataObj.url) {
@@ -213,26 +209,27 @@
                     loadingStatus.style.display = "none";
                     if (poseLandmarker) {
                         sysStatus.textContent = "✨ 試穿成功！請轉至正面並露出完整雙肩。";
+                    } else {
+                        sysStatus.textContent = "✨ 去背成功！（暫無骨骼追蹤，衣服置中顯示）";
                     }
                 };
             } else {
-                throw new Error("後端回傳格式與預期不符，請確認後端 Space 的元件輸入格式。");
+                throw new Error("後端回傳格式與預期不符。");
             }
         } catch (error) {
             console.error(error);
             loadingStatus.textContent = "❌ 後端 AI 處理失敗：" + error.message;
-            sysStatus.textContent = "請確認你的 Hugging Face Space 是開著（🟢 Running）且沒有睡著。";
         }
     }
 
-    // 4. 全畫布主導渲染迴圈（強迫同步視訊，拒絕黑屏）
+    // 4. 全畫布主導渲染迴圈
     function renderLoop() {
         const currentW = video.videoWidth || canvas.width || 640;
         const currentH = video.videoHeight || canvas.height || 480;
         if (canvas.width !== currentW) canvas.width = currentW;
         if (canvas.height !== currentH) canvas.height = currentH;
 
-        // 核心：將視訊畫面實時複製並強行渲染到畫布底層
+        // 核心防黑屏：將視訊畫面實時複製並強行渲染到畫布底層
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
         let landmarks = null;
@@ -245,47 +242,43 @@
                     landmarks = results.landmarks[0]; 
                 }
             } catch (poseErr) {
-                // 忽略偵測例外，維持畫面流暢
+                // 忽略
             }
         }
 
-        // 當衣服載入成功且精確捕捉到肩膀時
+        // 情況 A：去背成功 + 成功追蹤到肩膀骨骼 -> 動態套在身上
         if (isClothLoaded && landmarks) {
-            // MediaPipe 骨骼編號：11 為左肩，12 為右肩
             const leftShoulder = landmarks[11];
             const rightShoulder = landmarks[12];
 
-            // 轉化為畫布真實像素座標
             const lx = leftShoulder.x * canvas.width;
             const ly = leftShoulder.y * canvas.height;
             const rx = rightShoulder.x * canvas.width;
             const ry = rightShoulder.y * canvas.height;
 
-            // 定位：計算雙肩中點（作為衣服領口的掛載點）
             const midX = (lx + rx) / 2;
             const midY = (ly + ry) / 2;
 
-            // 縮放：計算肩膀寬度，並依比例將服裝放大 2.1 倍以合理覆蓋人體軀幹
             const shoulderWidth = Math.sqrt(Math.pow(lx - rx, 2) + Math.pow(ly - ry, 2));
             const clothWidth = shoulderWidth * 2.1; 
             const imgScale = currentClothingImage.naturalHeight / currentClothingImage.naturalWidth;
             const clothHeight = clothWidth * imgScale;
-
-            // 旋轉：根據身體左右傾斜的角度計算斜率
             const angle = Math.atan2(ly - ry, lx - rx);
 
-            // 套上衣服的 Canvas Matrix 變形渲染
             ctx.save();
-            ctx.translate(midX, midY + (clothHeight * 0.12)); // 領口微調下移
+            ctx.translate(midX, midY + (clothHeight * 0.12)); 
             ctx.rotate(angle);
-            ctx.drawImage(
-                currentClothingImage, 
-                -clothWidth / 2, 
-                -clothHeight * 0.08, // 旋轉定位點切齊領口
-                clothWidth, 
-                clothHeight
-            );
+            ctx.drawImage(currentClothingImage, -clothWidth / 2, -clothHeight * 0.08, clothWidth, clothHeight);
             ctx.restore();
+        } 
+        // 情況 B：備用模式（去背成功但 AI 骨骼未就緒） -> 至少將衣服畫在畫面中央，不讓使用者摸黑
+        else if (isClothLoaded && !landmarks) {
+            const clothWidth = canvas.width * 0.55;
+            const imgScale = currentClothingImage.naturalHeight / currentClothingImage.naturalWidth;
+            const clothHeight = clothWidth * imgScale;
+            const clothX = (canvas.width - clothWidth) / 2;
+            const clothY = (canvas.height - clothHeight) / 2 + 30;
+            ctx.drawImage(currentClothingImage, clothX, clothY, clothWidth, clothHeight);
         }
 
         requestAnimationFrame(renderLoop);
