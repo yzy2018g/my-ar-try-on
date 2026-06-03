@@ -1,20 +1,31 @@
 export function setStatus(text) {
     const el = document.getElementById("sysStatus");
-
-    if (!el) {
-        console.warn("sysStatus missing");
-        return;
-    }
-
+    if (!el) return;
     el.innerText = text;
 }
 
-export function showLoading(msg) {
-    const el = document.getElementById("loadingStatus");
+/* =========================
+   SAFE LOADING (關鍵修復)
+========================= */
+export function showLoading(text) {
+    const el = document.getElementById("loading");
+
+    if (!el) {
+        console.warn("loading element missing");
+        return;
+    }
+
+    el.innerText = text || "Loading...";
     el.style.display = "block";
-    el.textContent = msg;
 }
 
 export function hideLoading() {
-    document.getElementById("loadingStatus").style.display = "none";
+    const el = document.getElementById("loading");
+
+    if (!el) {
+        console.warn("loading element missing");
+        return;
+    }
+
+    el.style.display = "none";
 }
