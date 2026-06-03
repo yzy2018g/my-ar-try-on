@@ -1,9 +1,14 @@
-log("BIND START BTN...");
+window.appLoaded = true;
+console.log("APP LOADED OK");
 
-const startBtn = document.getElementById("startBtn");
+import { startCamera } from "./camera.js";
+import { initPose } from "./pose.js";
+import { removeBackground } from "./api.js";
+import { setStatus, showLoading, hideLoading } from "./ui.js";
 
-log("startBtn = " + startBtn);
-
+/* =========================
+   DEBUG
+========================= */
 function log(msg) {
     console.log(msg);
     const box = document.getElementById("debugBox");
@@ -18,20 +23,12 @@ function led(id, ok) {
 
 window.log = log;
 
-window.appLoaded = true;
-console.log("APP LOADED OK");
-import { startCamera } from "./camera.js";
-import { initPose } from "./pose.js";
-import { removeBackground } from "./api.js";
-import { setStatus, showLoading, hideLoading } from "./ui.js";
-
 /* =========================
-   DOM
+   DOM（只做一次）
 ========================= */
 const video = document.getElementById("webcam");
 const canvas = document.getElementById("arCanvas");
 const ctx = canvas.getContext("2d");
-
 const startBtn = document.getElementById("startBtn");
 
 /* =========================
@@ -45,25 +42,28 @@ let clothReady = false;
    START SYSTEM
 ========================= */
 startBtn.addEventListener("click", async () => {
+
+    log("CLICK OK");
+
     startBtn.style.display = "none";
     setStatus("初始化 AI 模型...");
 
-    // 1. Pose
     pose = await initPose();
+    led("led-pose", true);
 
-    setStatus("開啟相機...");
     await startCamera(video);
+    led("led-camera", true);
 
-    // canvas 尺寸初始化
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
 
     setStatus("系統就緒 ✓");
+
     loop();
 });
 
 /* =========================
-   CLOTH SELECT + API
+   CLOTH SELECT
 ========================= */
 window.selectCloth = async function (src, el) {
 
@@ -88,7 +88,7 @@ window.selectCloth = async function (src, el) {
         cloth.onload = () => {
             clothReady = true;
             hideLoading();
-            setStatus(pose ? "試穿成功 ✓ 請面向鏡頭" : "試穿成功（無骨架模式）");
+            setStatus(pose ? "試穿成功 ✓" : "試穿成功（無骨架模式）");
         };
 
     } catch (err) {
@@ -99,16 +99,14 @@ window.selectCloth = async function (src, el) {
 };
 
 /* =========================
-   RENDER LOOP
+   LOOP
 ========================= */
 function loop() {
 
-    // 畫背景（鏡頭）
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     let lm = null;
 
-    // pose detection
     if (pose && video.readyState >= 2) {
         try {
             const res = pose.detectForVideo(video, performance.now());
@@ -116,9 +114,6 @@ function loop() {
         } catch (e) {}
     }
 
-    /* =========================
-       A. AI + 骨架貼衣
-    ========================= */
     if (clothReady && lm) {
 
         const l = lm[11];
@@ -144,20 +139,11 @@ function loop() {
         ctx.translate(midX, midY + height * 0.12);
         ctx.rotate(angle);
 
-        ctx.drawImage(
-            cloth,
-            -width / 2,
-            -height * 0.08,
-            width,
-            height
-        );
+        ctx.drawImage(cloth, -width / 2, -height * 0.08, width, height);
 
         ctx.restore();
     }
 
-    /* =========================
-       B. fallback（無 pose）
-    ========================= */
     else if (clothReady && !lm) {
 
         const width = canvas.width * 0.55;
