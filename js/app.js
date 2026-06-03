@@ -12,9 +12,6 @@ function getAPI() {
     };
 }
 
-const runTryOn = window.runTryOn;
-const getResult = window.getResult;
-
 /* fallback protection */
 if (!uploadImage || !runTryOn || !getResult) {
     console.warn("API MODULE NOT READY");
