@@ -2,53 +2,65 @@ window.appLoaded = true;
 console.log("APP LOADED OK");
 
 /* =========================
-   IMPORT (建議已用 window api.js)
+   SAFE IMPORT
 ========================= */
 const uploadImage = window.uploadImage;
 const runTryOn = window.runTryOn;
 const getResult = window.getResult;
 
+/* fallback protection */
+if (!uploadImage || !runTryOn || !getResult) {
+    console.warn("API MODULE NOT READY");
+}
+
+/* =========================
+   IMPORT UI / AI
+========================= */
 import { startCamera } from "./camera.js";
 import { initPose } from "./pose.js";
 import { setStatus, showLoading, hideLoading } from "./ui.js";
 
 /* =========================
-   📱 DEBUG SYSTEM（手機強化）
+   DEBUG SYSTEM (SAFE)
 ========================= */
+function safeGet(id) {
+    return document.getElementById(id);
+}
+
 function log(msg) {
     console.log(msg);
 
-    const box = document.getElementById("debugBox");
+    const box = safeGet("debugBox");
     if (box) {
-        box.innerText += msg + "\n";
+        box.innerText += "\n" + msg;
         box.scrollTop = box.scrollHeight;
     }
 }
 
 function step(tag, msg) {
-    const text = `👉 ${tag}: ${msg}`;
-    log(text);
+    log(`👉 ${tag}: ${msg}`);
 }
 
 function error(tag, msg) {
-    const text = `❌ ${tag}: ${msg}`;
-    log(text);
-    console.error(text);
+    log(`❌ ${tag}: ${msg}`);
+    console.error(tag, msg);
 }
 
 function led(id, ok) {
-    const el = document.getElementById(id);
+    const el = safeGet(id);
     if (!el) return;
-    el.innerText = el.innerText.split(":")[0] + ": " + (ok ? "🟢" : "🔴");
+
+    const base = el.innerText?.split(":")[0] || id;
+    el.innerText = `${base}: ${ok ? "🟢" : "🔴"}`;
 }
 
 /* =========================
-   DOM
+   DOM SAFE INIT
 ========================= */
-const video = document.getElementById("webcam");
-const canvas = document.getElementById("arCanvas");
-const ctx = canvas.getContext("2d");
-const startBtn = document.getElementById("startBtn");
+const video = safeGet("webcam");
+const canvas = safeGet("arCanvas");
+const ctx = canvas ? canvas.getContext("2d") : null;
+const startBtn = safeGet("startBtn");
 
 /* =========================
    STATE
@@ -59,47 +71,54 @@ let clothReady = false;
 let isProcessing = false;
 
 /* =========================
-   START SYSTEM
+   START
 ========================= */
-startBtn.addEventListener("click", async () => {
+if (startBtn) {
+    startBtn.addEventListener("click", async () => {
 
-    step("CLICK", "OK");
+        step("CLICK", "OK");
 
-    startBtn.style.display = "none";
-    setStatus("初始化 AI 模型...");
+        startBtn.style.display = "none";
+        setStatus("初始化 AI 模型...");
 
-    try {
-        pose = await initPose();
-        led("led-pose", true);
-        step("POSE", "OK");
+        try {
+            pose = await initPose();
+            led("led-pose", true);
+            step("POSE", "OK");
 
-        await startCamera(video);
-        led("led-camera", true);
-        step("CAMERA", "OK");
+            await startCamera(video);
+            led("led-camera", true);
+            step("CAMERA", "OK");
 
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
+            if (video) {
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
+            }
 
-        setStatus("系統就緒 ✓");
-        step("SYSTEM", "READY");
+            setStatus("系統就緒 ✓");
+            step("SYSTEM", "READY");
 
-        loop();
+            loop();
 
-    } catch (err) {
-        error("INIT", err.message);
-    }
-});
+        } catch (err) {
+            error("INIT", err.message);
+        }
+    });
+}
 
 /* =========================
-   CAPTURE PERSON FRAME
+   CAPTURE
 ========================= */
 function captureFrame(video) {
-    const c = document.createElement("canvas");
-    c.width = video.videoWidth;
-    c.height = video.videoHeight;
 
-    const ctx = c.getContext("2d");
-    ctx.drawImage(video, 0, 0);
+    if (!video) throw new Error("NO VIDEO");
+
+    const c = document.createElement("canvas");
+    c.width = video.videoWidth || 640;
+    c.height = video.videoHeight || 480;
+
+    const cctx = c.getContext("2d");
+    cctx.drawImage(video, 0, 0);
 
     return new Promise(resolve => {
         c.toBlob(blob => {
@@ -109,7 +128,7 @@ function captureFrame(video) {
 }
 
 /* =========================
-   CLOTH SELECT + API FLOW
+   SELECT CLOTH (CRASH SAFE)
 ========================= */
 window.selectCloth = async function (src, el) {
 
@@ -123,13 +142,20 @@ window.selectCloth = async function (src, el) {
     step("SELECT", src);
     led("led-api", false);
 
-    document.querySelectorAll(".preview-box img")
-        .forEach(i => i.classList.remove("active"));
-    el.classList.add("active");
-
-    showLoading("AI 試衣中...");
-
     try {
+
+        /* safe UI */
+        const items = document.querySelectorAll(".preview-box img");
+        if (items?.forEach) {
+            items.forEach(i => i.classList.remove("active"));
+        }
+
+        if (el?.classList) {
+            el.classList.add("active");
+        }
+
+        showLoading("AI 試衣中...");
+
         /* STEP 1 */
         step("STEP 1", "load cloth");
 
@@ -138,7 +164,7 @@ window.selectCloth = async function (src, el) {
         const clothFile = new File([blob], "cloth.jpg", { type: blob.type });
 
         /* STEP 2 */
-        step("STEP 2", "capture person");
+        step("STEP 2", "capture");
 
         const personFile = await captureFrame(video);
 
@@ -146,7 +172,7 @@ window.selectCloth = async function (src, el) {
         step("STEP 3", "upload person");
 
         const personPath = await uploadImage(personFile);
-        step("PERSON PATH", personPath || "NULL");
+        step("PERSON", personPath || "NULL");
 
         if (!personPath) throw new Error("person upload failed");
 
@@ -154,7 +180,7 @@ window.selectCloth = async function (src, el) {
         step("STEP 4", "upload cloth");
 
         const clothPath = await uploadImage(clothFile);
-        step("CLOTH PATH", clothPath || "NULL");
+        step("CLOTH", clothPath || "NULL");
 
         if (!clothPath) throw new Error("cloth upload failed");
 
@@ -162,21 +188,26 @@ window.selectCloth = async function (src, el) {
         step("STEP 5", "run AI");
 
         const eventId = await runTryOn(personPath);
-        step("EVENT ID", eventId || "NULL");
+        step("EVENT", eventId || "NULL");
 
         if (!eventId) throw new Error("no eventId");
 
         /* STEP 6 */
-        step("STEP 6", "get result");
+        step("STEP 6", "result");
 
         const rawResult = await getResult(eventId);
-        step("RAW RESULT", rawResult ? "OK" : "NULL");
+        step("RAW", rawResult ? "OK" : "NULL");
 
         /* STEP 7 */
-        step("STEP 7", "parse result");
+        step("STEP 7", "parse");
 
-        const jsonMatch = rawResult.match(/\{.*\}/s);
-        const data = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+        let data = null;
+        try {
+            const match = rawResult?.match(/\{.*\}/s);
+            data = match ? JSON.parse(match[0]) : null;
+        } catch (e) {
+            error("PARSE", e.message);
+        }
 
         const url = data?.url || data?.data?.[0];
 
@@ -189,7 +220,7 @@ window.selectCloth = async function (src, el) {
             clothReady = true;
             hideLoading();
             led("led-api", true);
-            step("SUCCESS", "AI TRY-ON DONE");
+            step("SUCCESS", "DONE");
             setStatus("AI 試衣成功 ✓");
         };
 
@@ -208,6 +239,8 @@ window.selectCloth = async function (src, el) {
    LOOP
 ========================= */
 function loop() {
+
+    if (!ctx || !video) return;
 
     led("led-render", true);
 
@@ -246,9 +279,7 @@ function loop() {
         ctx.save();
         ctx.translate(midX, midY + height * 0.12);
         ctx.rotate(angle);
-
         ctx.drawImage(cloth, -width / 2, -height * 0.08, width, height);
-
         ctx.restore();
     }
 
