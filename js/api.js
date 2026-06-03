@@ -1,142 +1,83 @@
 const BASE = "https://michaelyo-my-ar-cloth-api.hf.space";
 
 /* =========================
-   🧠 LOG HELPERS
-========================= */
-function log(tag, msg) {
-    console.log(`[${tag}]`, msg);
-}
-
-/* =========================
-   1️⃣ UPLOAD IMAGE（手機穩定）
+   UPLOAD
 ========================= */
 export async function uploadImage(file) {
-
-    log("UPLOAD", "START");
 
     const formData = new FormData();
     formData.append("files", file);
 
-    let res;
-    try {
-        res = await fetch(`${BASE}/gradio_api/upload`, {
-            method: "POST",
-            body: formData
-        });
-    } catch (err) {
-        log("UPLOAD ERROR", err.message);
-        throw new Error("UPLOAD FETCH FAILED");
-    }
+    const res = await fetch(`${BASE}/gradio_api/upload`, {
+        method: "POST",
+        body: formData
+    });
 
-    const text = await res.text();
-    log("UPLOAD RAW", text);
-
-    let data;
-
-    try {
-        data = JSON.parse(text);
-    } catch (e) {
-        // ⚠️ 手機常見：不是 JSON
-        log("UPLOAD PARSE FAIL", text);
-        data = text;
-    }
+    const data = await res.json();
 
     let path = null;
 
-    if (Array.isArray(data)) {
-        path = data[0];
-    } else if (typeof data === "string") {
-        path = data;
-    } else if (data?.files?.[0]) {
-        path = data.files[0];
-    } else if (data?.path) {
-        path = data.path;
-    }
+    if (Array.isArray(data)) path = data[0];
+    else if (typeof data === "string") path = data;
+    else if (data?.[0]) path = data[0];
+    else if (data?.path) path = data.path;
 
-    log("UPLOAD PATH", path);
-
-    if (!path) {
-        throw new Error("UPLOAD FAILED (no path)");
-    }
+    if (!path) throw new Error("UPLOAD FAIL");
 
     return path;
 }
 
 /* =========================
-   2️⃣ RUN TRY ON
+   RUN
 ========================= */
 export async function runTryOn(personPath) {
 
-    log("RUN", "START");
+    const res = await fetch(`${BASE}/gradio_api/call/v2/predict`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            input_image: {
+                path: personPath,
+                meta: { _type: "gradio.FileData" }
+            }
+        })
+    });
 
-    let res;
+    const data = await res.json();
 
-    try {
-        res = await fetch(`${BASE}/gradio_api/call/v2/predict`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                input_image: {
-                    path: personPath,
-                    meta: { _type: "gradio.FileData" }
-                }
-            })
-        });
-    } catch (err) {
-        log("RUN ERROR", err.message);
-        throw new Error("RUN FETCH FAILED");
-    }
-
-    const text = await res.text();
-    log("RUN RAW", text);
-
-    let data;
-
-    try {
-        data = JSON.parse(text);
-    } catch (e) {
-        log("RUN PARSE FAIL", text);
-        throw new Error("RUN JSON PARSE FAILED");
-    }
-
-    const eventId = data?.event_id;
-
-    log("EVENT ID", eventId);
-
-    if (!eventId) {
+    if (!data?.event_id) {
         throw new Error("NO EVENT ID");
     }
 
-    return eventId;
+    return data.event_id;
 }
 
 /* =========================
-   3️⃣ GET RESULT（手機 safe）
+   RESULT
 ========================= */
 export async function getResult(eventId) {
 
-    log("RESULT", "START");
+    const res = await fetch(`${BASE}/gradio_api/call/predict/${eventId}`);
 
-    const url = `${BASE}/gradio_api/call/predict/${eventId}`;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
 
-    let res;
+    let text = "";
 
-    try {
-        res = await fetch(url);
-    } catch (err) {
-        log("RESULT ERROR", err.message);
-        throw new Error("RESULT FETCH FAILED");
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
     }
-
-    const text = await res.text();
-
-    log("RESULT RAW", text);
 
     return text;
 }
 
+/* =========================
+   🔥 CRITICAL: window injection
+========================= */
 window.uploadImage = uploadImage;
 window.runTryOn = runTryOn;
 window.getResult = getResult;
+
+console.log("API JS LOADED OK");
