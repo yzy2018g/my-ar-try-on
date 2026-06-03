@@ -115,9 +115,13 @@
     // ==========================================
     // 1. 初始化 MediaPipe Pose 身體追蹤
     // ==========================================
+    // 修正後：強制指定 0.5.1675194473 穩定版，並使用完整的 jsDelivr 絕對路徑
     const pose = new Pose({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-    });
+        locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675194473/${file}`;
+        }
+     });
+
 
     pose.setOptions({
         modelComplexity: 1,      
