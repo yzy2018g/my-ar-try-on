@@ -2,19 +2,16 @@ window.appLoaded = true;
 console.log("APP LOADED OK");
 
 /* =========================
-   SAFE IMPORT
+   SAFE API LAYER (核心修復)
 ========================= */
 function getAPI() {
-    return {
-        uploadImage: window.uploadImage,
-        runTryOn: window.runTryOn,
-        getResult: window.getResult
-    };
-}
+    const api = window;
 
-/* fallback protection */
-if (!uploadImage || !runTryOn || !getResult) {
-    console.warn("API MODULE NOT READY");
+    return {
+        uploadImage: api.uploadImage,
+        runTryOn: api.runTryOn,
+        getResult: api.getResult
+    };
 }
 
 /* =========================
@@ -25,7 +22,7 @@ import { initPose } from "./pose.js";
 import { setStatus, showLoading, hideLoading } from "./ui.js";
 
 /* =========================
-   DEBUG SYSTEM (SAFE)
+   DEBUG SYSTEM (SAFE MOBILE)
 ========================= */
 function safeGet(id) {
     return document.getElementById(id);
@@ -59,7 +56,7 @@ function led(id, ok) {
 }
 
 /* =========================
-   DOM SAFE INIT
+   DOM INIT (SAFE)
 ========================= */
 const video = safeGet("webcam");
 const canvas = safeGet("arCanvas");
@@ -75,7 +72,7 @@ let clothReady = false;
 let isProcessing = false;
 
 /* =========================
-   START
+   START SYSTEM
 ========================= */
 if (startBtn) {
     startBtn.addEventListener("click", async () => {
@@ -94,7 +91,7 @@ if (startBtn) {
             led("led-camera", true);
             step("CAMERA", "OK");
 
-            if (video) {
+            if (video && canvas) {
                 canvas.width = video.videoWidth || 640;
                 canvas.height = video.videoHeight || 480;
             }
@@ -111,7 +108,7 @@ if (startBtn) {
 }
 
 /* =========================
-   CAPTURE
+   CAPTURE FRAME
 ========================= */
 function captureFrame(video) {
 
@@ -132,7 +129,7 @@ function captureFrame(video) {
 }
 
 /* =========================
-   SELECT CLOTH (CRASH SAFE)
+   CLOTH SELECT + API FLOW (FIXED)
 ========================= */
 window.selectCloth = async function (src, el) {
 
@@ -148,15 +145,11 @@ window.selectCloth = async function (src, el) {
 
     try {
 
-        /* safe UI */
+        /* SAFE UI */
         const items = document.querySelectorAll(".preview-box img");
-        if (items?.forEach) {
-            items.forEach(i => i.classList.remove("active"));
-        }
+        items?.forEach?.(i => i.classList.remove("active"));
 
-        if (el?.classList) {
-            el.classList.add("active");
-        }
+        el?.classList?.add("active");
 
         showLoading("AI 試衣中...");
 
@@ -168,14 +161,21 @@ window.selectCloth = async function (src, el) {
         const clothFile = new File([blob], "cloth.jpg", { type: blob.type });
 
         /* STEP 2 */
-        step("STEP 2", "capture");
+        step("STEP 2", "capture person");
 
         const personFile = await captureFrame(video);
+
+        /* GET API (IMPORTANT FIX) */
+        const api = getAPI();
+
+        if (!api.uploadImage || !api.runTryOn || !api.getResult) {
+            throw new Error("API not ready (window missing functions)");
+        }
 
         /* STEP 3 */
         step("STEP 3", "upload person");
 
-        const personPath = await uploadImage(personFile);
+        const personPath = await api.uploadImage(personFile);
         step("PERSON", personPath || "NULL");
 
         if (!personPath) throw new Error("person upload failed");
@@ -183,7 +183,7 @@ window.selectCloth = async function (src, el) {
         /* STEP 4 */
         step("STEP 4", "upload cloth");
 
-        const clothPath = await uploadImage(clothFile);
+        const clothPath = await api.uploadImage(clothFile);
         step("CLOTH", clothPath || "NULL");
 
         if (!clothPath) throw new Error("cloth upload failed");
@@ -191,21 +191,22 @@ window.selectCloth = async function (src, el) {
         /* STEP 5 */
         step("STEP 5", "run AI");
 
-        const eventId = await runTryOn(personPath);
+        const eventId = await api.runTryOn(personPath);
         step("EVENT", eventId || "NULL");
 
         if (!eventId) throw new Error("no eventId");
 
         /* STEP 6 */
-        step("STEP 6", "result");
+        step("STEP 6", "get result");
 
-        const rawResult = await getResult(eventId);
+        const rawResult = await api.getResult(eventId);
         step("RAW", rawResult ? "OK" : "NULL");
 
         /* STEP 7 */
-        step("STEP 7", "parse");
+        step("STEP 7", "parse result");
 
         let data = null;
+
         try {
             const match = rawResult?.match(/\{.*\}/s);
             data = match ? JSON.parse(match[0]) : null;
@@ -240,7 +241,7 @@ window.selectCloth = async function (src, el) {
 };
 
 /* =========================
-   LOOP
+   RENDER LOOP
 ========================= */
 function loop() {
 
