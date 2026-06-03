@@ -1,3 +1,5 @@
+window.appLoaded = true;
+console.log("APP LOADED OK");
 import { startCamera } from "./js/camera.js";
 import { initPose } from "./js/pose.js";
 import { removeBackground } from "./js/api.js";
