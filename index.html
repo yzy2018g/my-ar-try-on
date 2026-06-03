@@ -33,8 +33,11 @@
     <img src="style_2.png" onclick="selectCloth('style_2.png', this)">
 </div>
 
-<video id="webcam" autoplay playsinline muted></video>
-<canvas id="arCanvas"></canvas>
+<!-- 🔥 FIX：補上 view-panel（你之前缺這個） -->
+<div class="view-panel">
+    <video id="webcam" autoplay playsinline muted></video>
+    <canvas id="arCanvas"></canvas>
+</div>
 
 <script>
 /* =========================
@@ -57,18 +60,20 @@ window.onerror = function (msg, src, line, col, err) {
     log("📍位置: " + src + ":" + line);
 };
 
-/* 3. 檢查 module 是否載入 */
+/* 3. 檢查 app.js 是否成功 */
 setTimeout(() => {
     if (!window.appLoaded) {
         log("❌ app.js 沒有成功執行（可能 404 或 import 壞掉）");
+    } else {
+        log("🟢 app.js 已成功載入");
     }
 }, 3000);
 
 </script>
 
-<!-- 🔥 這裡是關鍵 -->
+<!-- 🔥 JS 主程式 -->
 <script type="module" src="js/app.js"
-    onerror="document.getElementById('debugBox').innerText += '❌ app.js 載入失敗（404 或路徑錯）'">
+    onerror="document.getElementById('debugBox').innerText += '\n❌ app.js 載入失敗（404 或路徑錯）'">
 </script>
 
 </body>
