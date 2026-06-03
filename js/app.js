@@ -1,3 +1,7 @@
+console.log("uploadImage =", uploadImage);
+console.log("runTryOn =", runTryOn);
+console.log("getResult =", getResult);
+
 window.appLoaded = true;
 console.log("APP LOADED OK");
 
