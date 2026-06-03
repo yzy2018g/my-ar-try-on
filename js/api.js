@@ -1,44 +1,54 @@
-import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1/dist/index.min.js";
+const BASE_URL = "https://michaelyo-my-ar-cloth-api.hf.space";
 
-let client = null;
+// 1️⃣ upload image
+export async function uploadImage(file) {
+  const formData = new FormData();
+  formData.append("files", file);
 
-export async function initAPI() {
+  const res = await fetch(`${BASE_URL}/gradio_api/upload`, {
+    method: "POST",
+    body: formData
+  });
 
-    console.log("INIT API");
-
-    client = await Client.connect(
-        "michaelyo/my-ar-cloth-api"
-    );
-
-    console.log("CLIENT CONNECTED");
+  const data = await res.json();
+  return data[0]; // file path
 }
 
-export async function removeBackground(imageFile) {
+// 2️⃣ call model
+export async function runTryOn(imagePath) {
+  const res = await fetch(`${BASE_URL}/gradio_api/call/v2/predict`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      input_image: {
+        path: imagePath,
+        meta: { _type: "gradio.FileData" }
+      }
+    })
+  });
 
-    try {
+  const data = await res.json();
+  return data.event_id;
+}
 
-        if (!client) {
-            console.log("NO CLIENT -> CONNECT");
-            await initAPI();
-        }
+// 3️⃣ get result (SSE)
+export async function getResult(eventId) {
+  const res = await fetch(
+    `${BASE_URL}/gradio_api/call/predict/${eventId}`
+  );
 
-        console.log("START PREDICT");
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
 
-        const result = await client.predict(
-            "/predict",
-            {
-                input_image: imageFile
-            }
-        );
+  let result = "";
 
-        console.log("PREDICT OK");
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    result += decoder.decode(value, { stream: true });
+  }
 
-        return result;
-
-    } catch(err) {
-
-        console.error("API ERROR", err);
-
-        throw err;
-    }
+  return result;
 }
