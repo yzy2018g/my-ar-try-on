@@ -7,29 +7,15 @@ import { uploadImage, runTryOn, getResult } from "./api.js";
 import { setStatus, showLoading, hideLoading } from "./ui.js";
 
 /* =========================
-   📱 MOBILE DEBUG PANEL
+   📱 DEBUG SYSTEM
 ========================= */
-function debugStep(msg) {
-    console.log("[STEP]", msg);
-
+function log(msg) {
+    console.log(msg);
     const box = document.getElementById("debugBox");
     if (box) {
-        box.innerText += "👉 " + msg + "\n";
+        box.innerText += msg + "\n";
         box.scrollTop = box.scrollHeight;
     }
-
-    setStatus(msg);
-}
-
-function debugError(msg) {
-    console.error("[ERROR]", msg);
-
-    const box = document.getElementById("debugBox");
-    if (box) {
-        box.innerText += "❌ " + msg + "\n";
-    }
-
-    setStatus("❌ " + msg);
 }
 
 function led(id, ok) {
@@ -53,39 +39,43 @@ let pose = null;
 let cloth = new Image();
 let clothReady = false;
 
+/* 🚨 防連點關鍵 */
+let isProcessing = false;
+
 /* =========================
    START
 ========================= */
 startBtn.addEventListener("click", async () => {
 
-    debugStep("CLICK OK");
+    log("👉 CLICK OK");
 
     startBtn.style.display = "none";
-    debugStep("初始化 AI 模型...");
+    setStatus("初始化 AI 模型...");
 
     try {
         pose = await initPose();
         led("led-pose", true);
-        debugStep("POSE OK");
+        log("👉 POSE OK");
 
         await startCamera(video);
         led("led-camera", true);
-        debugStep("CAMERA OK");
+        log("👉 CAMERA OK");
 
         canvas.width = video.videoWidth || 640;
         canvas.height = video.videoHeight || 480;
 
-        debugStep("系統就緒 ✓");
+        setStatus("系統就緒 ✓");
+        log("👉 SYSTEM READY");
 
         loop();
 
     } catch (err) {
-        debugError("INIT FAIL: " + err.message);
+        log("❌ INIT ERROR: " + err.message);
     }
 });
 
 /* =========================
-   CAPTURE
+   CAPTURE PERSON FRAME
 ========================= */
 function captureFrame(video) {
     const c = document.createElement("canvas");
@@ -103,11 +93,19 @@ function captureFrame(video) {
 }
 
 /* =========================
-   CLOTH + API FLOW (DEBUG HEAVY)
+   CLOTH SELECT + AI FLOW
 ========================= */
 window.selectCloth = async function (src, el) {
 
-    debugStep("SELECT: " + src);
+    /* 🚨 防連點 */
+    if (isProcessing) {
+        log("⚠️ 忽略重複點擊: " + src);
+        return;
+    }
+
+    isProcessing = true;
+
+    log("👉 SELECT: " + src);
     led("led-api", false);
 
     document.querySelectorAll(".preview-box img")
@@ -117,45 +115,59 @@ window.selectCloth = async function (src, el) {
     showLoading("AI 試衣中...");
 
     try {
-        debugStep("STEP 1: loading cloth");
+        /* STEP 1 */
+        log("STEP 1: load cloth");
 
         const res = await fetch(src);
         const blob = await res.blob();
         const clothFile = new File([blob], "cloth.jpg", { type: blob.type });
 
-        debugStep("STEP 2: capture person");
+        /* STEP 2 */
+        log("STEP 2: capture person");
 
         const personFile = await captureFrame(video);
 
-        debugStep("STEP 3: upload person");
+        /* STEP 3 */
+        log("STEP 3: upload person");
 
         const personPath = await uploadImage(personFile);
-        debugStep("personPath OK");
+        if (!personPath) throw new Error("person upload failed");
 
-        debugStep("STEP 4: upload cloth");
+        log("✔ person uploaded");
+
+        /* STEP 4 */
+        log("STEP 4: upload cloth");
 
         const clothPath = await uploadImage(clothFile);
-        debugStep("clothPath OK");
+        if (!clothPath) throw new Error("cloth upload failed");
 
-        debugStep("STEP 5: run AI");
+        log("✔ cloth uploaded");
+
+        /* STEP 5 */
+        log("STEP 5: run AI");
 
         const eventId = await runTryOn(personPath);
-        debugStep("eventId: " + eventId);
+        if (!eventId) throw new Error("eventId missing");
 
-        debugStep("STEP 6: waiting result");
+        log("eventId: " + eventId);
+
+        /* STEP 6 */
+        log("STEP 6: waiting result");
 
         const rawResult = await getResult(eventId);
 
-        debugStep("RAW RESULT RECEIVED");
+        log("RAW RESULT RECEIVED");
 
+        /* parse */
         const jsonMatch = rawResult.match(/\{.*\}/s);
         const data = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
 
         const url = data?.url || data?.data?.[0];
 
-        if (!url) throw new Error("NO IMAGE URL");
+        if (!url) throw new Error("no output image");
 
-        debugStep("STEP 7: render image");
+        /* STEP 7 */
+        log("STEP 7: render result");
 
         cloth.crossOrigin = "anonymous";
         cloth.src = url;
@@ -164,18 +176,26 @@ window.selectCloth = async function (src, el) {
             clothReady = true;
             hideLoading();
             led("led-api", true);
-            debugStep("SUCCESS ✓");
+            log("👉 SUCCESS ✓");
+            setStatus("AI 試衣成功 ✓");
         };
 
     } catch (err) {
+        console.error(err);
+        log("❌ ERROR: " + err.message);
+
         hideLoading();
         led("led-api", false);
-        debugError(err.message);
+        setStatus("❌ " + err.message);
+
+    } finally {
+        /* 🚨 解鎖 */
+        isProcessing = false;
     }
 };
 
 /* =========================
-   LOOP
+   LOOP (AR RENDER)
 ========================= */
 function loop() {
 
