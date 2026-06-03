@@ -1,3 +1,17 @@
+function log(msg) {
+    console.log(msg);
+    const box = document.getElementById("debugBox");
+    if (box) box.innerText += msg + "\n";
+}
+
+function led(id, ok) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerText = el.innerText.split(":")[0] + ": " + (ok ? "🟢" : "🔴");
+}
+
+window.log = log;
+
 window.appLoaded = true;
 console.log("APP LOADED OK");
 import { startCamera } from "./camera.js";
