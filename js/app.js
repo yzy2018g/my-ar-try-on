@@ -67,6 +67,9 @@ startBtn.addEventListener("click", async () => {
 ========================= */
 window.selectCloth = async function (src, el) {
 
+    log("SELECT CLOTH: " + src);
+    led("led-api", false);
+
     document.querySelectorAll(".preview-box img")
         .forEach(i => i.classList.remove("active"));
     el.classList.add("active");
@@ -103,7 +106,9 @@ window.selectCloth = async function (src, el) {
 ========================= */
 function loop() {
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+   led("led-render", true);
+   
+   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     let lm = null;
 
