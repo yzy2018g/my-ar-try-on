@@ -17,11 +17,11 @@
         .view-panel { position: relative; width: 100%; max-width: 640px; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; }
         video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
         
-        /* 讓 Canvas 疊在最上面，負責即時渲染所有畫面 */
+        /* 讓 Canvas 疊在最上面 */
         canvas { z-index: 10; pointer-events: none; }
-        video { opacity: 0; pointer-events: none; } /* 隱藏底層視訊，完全由 Canvas 接手繪製 */
+        video { opacity: 0; pointer-events: none; } /* 隱藏底層視訊，由 Canvas 接手繪製 */
         
-        /* 狀態提示與即時除錯區 */
+        /* 狀態提示區 */
         .loading { display: none; color: #00ffcc; font-weight: bold; margin: 5px 0; }
         .status-bar { color: #fff; background: #333; padding: 8px 12px; border-radius: 6px; font-size: 14px; margin-bottom: 10px; min-height: 20px; word-break: break-all; border: 1px solid #555; }
         
@@ -53,8 +53,7 @@
     </div>
 
 <script type="module">
-    import { Client, handle_file } from "https://cdn.jsdelivr.net/npm/@gradio/client@1/dist/index.min.js";
-
+    // 🛑 拋棄 Gradio Client 引入，改為純前端 API 呼叫，徹底防禦 Buffer is not defined 錯誤
     const video = document.getElementById('webcam');
     const canvas = document.getElementById('arCanvas');
     const ctx = canvas.getContext('2d');
@@ -68,7 +67,8 @@
     let lastVideoTime = -1;
     let isCameraRunning = false;
 
-    const HF_SPACE_URL = "https://michaelyo-my-ar-cloth-api.hf.space";
+    // 🛑 改為直接呼叫你 Space 的 Gradio HTTP API 端點
+    const HF_API_URL = "https://michaelyo-my-ar-cloth-api.hf.space/api/predict";
 
     // 點擊啟動系統
     startBtn.addEventListener('click', async () => {
@@ -80,9 +80,8 @@
     // 1. 初始化 MediaPipe Pose 模型
     async function initPoseLandmarker() {
         try {
-            // 🛑 核心防禦：檢查全域變數 window.vision 是否存在
             if (!window.vision) {
-                throw new Error("網頁未能成功載入 MediaPipe 核心腳本，請檢查網路連線或更換瀏覽器。");
+                throw new Error("網頁未能成功載入 MediaPipe 核心腳本。");
             }
 
             const { PoseLandmarker, FilesetResolver } = window.vision;
@@ -104,7 +103,6 @@
         } catch (err) {
             sysStatus.textContent = "⚠️ " + err.message + " (系統將切換至無 AI 備用模式，優先點亮鏡頭)";
             console.error(err);
-            // 🛑 就算 AI 掛掉，也絕對不能全黑，立刻強迫啟動相機
             await setupCamera();
         }
     }
@@ -123,7 +121,6 @@
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             video.srcObject = stream;
             
-            // 強制執行的點亮迴圈
             const triggerRender = () => {
                 video.play().then(() => {
                     if (isCameraRunning) return;
@@ -139,24 +136,22 @@
                     }
                     requestAnimationFrame(renderLoop);
                 }).catch(e => {
-                    sysStatus.textContent = "❌ 視訊自動播放受阻，請點擊網頁任意空白處以手動解鎖相機。";
+                    sysStatus.textContent = "❌ 視訊自動播放受阻，請點擊網頁任意處解鎖。";
                     document.body.addEventListener('click', () => video.play(), { once: true });
                 });
             };
 
             video.addEventListener('loadedmetadata', triggerRender);
             video.addEventListener('loadeddata', triggerRender);
-            
-            // 手機端兜底：1秒後無論如何強制渲染
             setTimeout(triggerRender, 1200);
 
         } catch (err) {
-            sysStatus.textContent = "❌ 無法獲取相機權限：" + err.name + " (" + err.message + ")。請至手機設定中允許瀏覽器存取相機。";
+            sysStatus.textContent = "❌ 無法獲取相機權限：" + err.message;
             console.error(err);
         }
     }
 
-    // 3. 呼叫後端 API 進行服裝去背
+    // 3. 🛑 修正：使用純原生 Fetch FormData 上傳檔案，100% 避開 Buffer 錯誤
     window.selectCloth = async function(imgSrc, element) {
         document.querySelectorAll('.preview-box img').forEach(img => img.classList.remove('active'));
         element.classList.add('active');
@@ -166,15 +161,43 @@
         isClothLoaded = false;
 
         try {
+            // A. 將本地圖片轉成 Blob
             const response = await fetch(imgSrc);
             const blob = await response.blob();
-            const fileData = await handle_file(blob);
 
-            const app = await Client.connect(HF_SPACE_URL);
-            const result = await app.predict("/predict", { input_image: fileData });
+            // B. 第一步：先將檔案上傳至 Hugging Face 的臨時伺服器取得 URL
+            sysStatus.textContent = "正在上傳影像至 Hugging Face...";
+            const formData = new FormData();
+            formData.append('files', blob, imgSrc);
 
-            console.log("Gradio 後端回傳:", result);
+            const uploadResponse = await fetch("https://michaelyo-my-ar-cloth-api.hf.space/upload", {
+                method: "POST",
+                body: formData
+            });
+            const uploadResult = await uploadResponse.json();
+            
+            if (!uploadResult || !uploadResult[0]) {
+                throw new Error("影像上傳至伺服器失敗");
+            }
+            
+            const serverFilePath = uploadResult[0]; // 取得伺服器內部的暫存路徑
 
+            // C. 第二步：發送預測請求給 /predict 接口
+            sysStatus.textContent = "伺服器 AI 正在計算去背與模特兒肢體消除...";
+            const predictResponse = await fetch(HF_API_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    data: [
+                        { "path": serverFilePath, "meta": { "_type": "gradio.FileData" } }
+                    ]
+                })
+            });
+            
+            const result = await predictResponse.json();
+            console.log("Gradio 後端原生回傳:", result);
+
+            // D. 解析回傳結果
             if (result.data && result.data[0]) {
                 const dataObj = result.data[0];
                 currentClothingImage.crossOrigin = "anonymous"; 
@@ -188,31 +211,30 @@
                 currentClothingImage.onload = () => {
                     isClothLoaded = true;
                     loadingStatus.style.display = "none";
-                    if (poseLandmarker) {
-                        sysStatus.textContent = "✨ 去背完成！請轉至正面並露出完整雙肩。";
-                    }
+                    sysStatus.textContent = "✨ 試穿成功！請露出完整雙肩查看效果。";
                 };
+            } else {
+                throw new Error(result.error || "後端回傳資料空泛");
             }
         } catch (error) {
             console.error(error);
             loadingStatus.textContent = "❌ 後端 AI 處理失敗：" + error.message;
+            sysStatus.textContent = "請檢查 Hugging Face Space 後端是否正常運作。";
         }
     }
 
-    // 4. 全畫布主導渲染迴圈（強迫同步每一格視訊影像）
+    // 4. 全畫布主導渲染迴圈
     function renderLoop() {
-        // 設定畫布尺寸（隨視訊實際解析度動態調整）
         const currentW = video.videoWidth || canvas.width || 640;
         const currentH = video.videoHeight || canvas.height || 480;
         if (canvas.width !== currentW) canvas.width = currentW;
         if (canvas.height !== currentH) canvas.height = currentH;
 
-        // 💡 關鍵防黑屏：將視訊影格強行畫到 Canvas 最底層
+        // 將視訊強行畫到 Canvas，點亮畫面
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
         let landmarks = null;
 
-        // 當 AI 存在且相機有新影格時，計算骨骼點
         if (poseLandmarker && video.currentTime !== lastVideoTime && video.readyState >= 2) {
             lastVideoTime = video.currentTime;
             try {
@@ -221,11 +243,10 @@
                     landmarks = results.landmarks[0]; 
                 }
             } catch (poseErr) {
-                // 忽略內部核心錯誤，維持畫面順暢
+                // 忽略內部錯誤
             }
         }
 
-        // 如果成功去背，且有偵測到人體，進行 AR 衣服疊加
         if (isClothLoaded && landmarks) {
             const leftShoulder = landmarks[11];
             const rightShoulder = landmarks[12];
