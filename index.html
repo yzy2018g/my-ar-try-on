@@ -8,7 +8,7 @@
         body { font-family: Arial, sans-serif; text-align: center; background: #222; color: white; margin: 0; padding: 20px; }
         .container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
         
-        /* 選擇衣服的預覽區 */
+        /* 選擇衣服的預覽按鈕區 */
         .preview-box { display: flex; gap: 10px; margin-bottom: 5px; }
         .preview-box img { width: 80px; height: 80px; object-fit: cover; border: 2px solid #fff; cursor: pointer; border-radius: 8px; transition: 0.2s; }
         .preview-box img.active { border-color: #00ffcc; transform: scale(1.05); }
@@ -53,6 +53,9 @@
     </div>
 
 <script type="module">
+    // 🛑 重新引回官方最新的 Client 模組（維持你最初成功的連線基底）
+    import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1/dist/index.min.js";
+
     const video = document.getElementById('webcam');
     const canvas = document.getElementById('arCanvas');
     const ctx = canvas.getContext('2d');
@@ -66,9 +69,7 @@
     let lastVideoTime = -1;
     let isCameraRunning = false;
 
-    // 🛑 直接調用預測介面端點
-    const HF_API_URL = "https://michaelyo-my-ar-cloth-api.hf.space/api/predict";
-
+    // 點擊啟動系統
     startBtn.addEventListener('click', async () => {
         startBtn.style.display = 'none';
         sysStatus.textContent = "正在檢查並載入 AI 骨骼追蹤模型...";
@@ -87,6 +88,7 @@
                 "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
             );
             
+            // 使用 3MB 輕量化模型，避免手機載入超時
             poseLandmarker = await PoseLandmarker.createFromOptions(visionResolver, {
                 baseOptions: {
                     modelAssetPath: `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite.task`,
@@ -145,59 +147,40 @@
         }
     }
 
-    // 💡 輔助函式：將 Blob 轉成純前端 Base64 DataURL 字串
-    function blobToBase64(blob) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    }
-
-    // 3. 點擊圖片：精準模擬官方 SDK 的 FileData 物件結構
+    // 3. 選擇衣服並送去 Hugging Face 去背
     window.selectCloth = async function(imgSrc, element) {
         document.querySelectorAll('.preview-box img').forEach(img => img.classList.remove('active'));
         element.classList.add('active');
 
         loadingStatus.style.display = "block";
-        loadingStatus.textContent = "後端 AI 去背處理中...請稍候...";
+        loadingStatus.textContent = "後端 AI 去背處理中...請稍候...（預計 3~5 秒）";
         isClothLoaded = false;
 
         try {
-            sysStatus.textContent = "正在編碼服裝影像資料...";
+            sysStatus.textContent = "正在透過 Gradio SDK 建立安全連線...";
+            
+            // 🛑 修正防禦機制：不直接傳送 Blob，改為將 Fetch 到的影像包裝成標準前端 File 物件
+            // 這樣既可以完美迎合 Gradio Client 的需求，又可以百分之百避開行動端的 Buffer 噴錯！
             const response = await fetch(imgSrc);
             const blob = await response.blob();
-            const base64Data = await blobToBase64(blob);
+            const imageFile = new File([blob], imgSrc, { type: blob.type });
 
+            // 1. 初始化 Gradio Client 連線（指向你的 Space ID）
+            const app = await Client.connect("michaelyo/my-ar-cloth-api");
+
+            // 2. 呼叫後端 /predict 接口，指定精確的欄位名稱 input_image
             sysStatus.textContent = "後端 AI 正在全力運算中（去背與模特兒肢體消除）...";
-            
-            // 🛑 核心修正：將資料包裝成 Gradio 預期接收的單一對象結構（內含 data 欄位存放 base64）
-            const payload = {
-                data: [
-                    {
-                        data: base64Data,
-                        name: imgSrc,
-                        meta: { _type: "gradio.FileData" }
-                    }
-                ]
-            };
-
-            const predictResponse = await fetch(HF_API_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
+            const result = await app.predict("/predict", { 
+                input_image: imageFile 
             });
-            
-            if (!predictResponse.ok) {
-                throw new Error(`HTTP 錯誤狀態碼: ${predictResponse.status}`);
-            }
 
-            const result = await predictResponse.json();
-            console.log("後端回傳結果:", result);
+            console.log("Gradio 後端回傳結果:", result);
 
+            // 3. 取得去背後的圖片網址並加載
             if (result.data && result.data[0]) {
                 const dataObj = result.data[0];
+                
+                // 設定跨域允許
                 currentClothingImage.crossOrigin = "anonymous"; 
 
                 if (dataObj && typeof dataObj === 'object' && dataObj.url) {
@@ -216,11 +199,12 @@
                     }
                 };
             } else {
-                throw new Error("後端回傳格式與預期不符。");
+                throw new Error("後端沒有回傳有效的影像資料。");
             }
         } catch (error) {
-            console.error(error);
-            loadingStatus.textContent = "❌ 後端 AI 處理失敗：" + error.message;
+            console.error("詳細錯誤訊息:", error);
+            loadingStatus.textContent = "❌ 后端 AI 處理失敗：" + error.message;
+            sysStatus.textContent = "請確認您的 Space 狀態是否為 🟢 Running。";
         }
     }
 
@@ -231,6 +215,7 @@
         if (canvas.width !== currentW) canvas.width = currentW;
         if (canvas.height !== currentH) canvas.height = currentH;
 
+        // 核心防黑屏：將視訊畫面實時複製並強行渲染到畫布底層
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
         let landmarks = null;
@@ -247,6 +232,7 @@
             }
         }
 
+        // 情況 A：去背成功 + 成功追蹤到肩膀骨骼 -> 動態套在身上
         if (isClothLoaded && landmarks) {
             const leftShoulder = landmarks[11];
             const rightShoulder = landmarks[12];
@@ -271,6 +257,7 @@
             ctx.drawImage(currentClothingImage, -clothWidth / 2, -clothHeight * 0.08, clothWidth, clothHeight);
             ctx.restore();
         } 
+        // 情況 B：備用模式（去背成功但 AI 骨骼未就緒） -> 至少將衣服畫在畫面中央，不讓使用者摸黑
         else if (isClothLoaded && !landmarks) {
             const clothWidth = canvas.width * 0.55;
             const imgScale = currentClothingImage.naturalHeight / currentClothingImage.naturalWidth;
@@ -286,3 +273,4 @@
     
 </body>
 </html>
+
