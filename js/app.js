@@ -1,3 +1,9 @@
+log("BIND START BTN...");
+
+const startBtn = document.getElementById("startBtn");
+
+log("startBtn = " + startBtn);
+
 function log(msg) {
     console.log(msg);
     const box = document.getElementById("debugBox");
