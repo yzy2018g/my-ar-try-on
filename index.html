@@ -4,273 +4,43 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AR 智慧動態試衣間</title>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; background: #222; color: white; margin: 0; padding: 20px; }
-        .container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
-        
-        /* 選擇衣服的預覽按鈕區 */
-        .preview-box { display: flex; gap: 10px; margin-bottom: 5px; }
-        .preview-box img { width: 80px; height: 80px; object-fit: cover; border: 2px solid #fff; cursor: pointer; border-radius: 8px; transition: 0.2s; }
-        .preview-box img.active { border-color: #00ffcc; transform: scale(1.05); }
-        
-        /* 視訊顯示與畫布面板 */
-        .view-panel { position: relative; width: 100%; max-width: 640px; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; }
-        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-        
-        /* 讓 Canvas 疊在最上面，負責即時渲染所有畫面 */
-        canvas { z-index: 10; pointer-events: none; }
-        video { opacity: 0; pointer-events: none; } /* 隱藏底層視訊，完全由 Canvas 接手繪製 */
-        
-        /* 狀態提示與即時除錯區 */
-        .loading { display: none; color: #00ffcc; font-weight: bold; margin: 5px 0; }
-        .status-bar { color: #fff; background: #333; padding: 8px 12px; border-radius: 6px; font-size: 14px; margin-bottom: 10px; min-height: 20px; word-break: break-all; border: 1px solid #555; }
-        
-        /* 啟動按鈕 */
-        .start-btn { padding: 12px 24px; font-size: 16px; background: #00ffcc; color: #222; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-    </style>
+
+    <link rel="stylesheet" href="style.css">
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm/vision_bundle.js"></script>
 </head>
 <body>
 
     <h1>AR 智慧動態試衣間</h1>
-    <button class="start-btn" id="startBtn">點擊啟動相機與 AI 系統</button>
-    <div class="status-bar" id="sysStatus">請先點擊上方按鈕啟動系統...</div>
-    
+
+    <button class="start-btn" id="startBtn">
+        點擊啟動相機與 AI 系統
+    </button>
+
+    <div class="status-bar" id="sysStatus">
+        請先點擊上方按鈕啟動系統...
+    </div>
+
     <div class="container">
+
         <div class="preview-box">
             <img src="cloth.png" alt="衣服1" onclick="selectCloth('cloth.png', this)">
             <img src="style_1.png" alt="衣服2" onclick="selectCloth('style_1.png', this)">
             <img src="style_2.png" alt="衣服3" onclick="selectCloth('style_2.png', this)">
         </div>
 
-        <div id="loadingStatus" class="loading">後端 AI 去背處理中...請稍候...</div>
+        <div id="loadingStatus" class="loading">
+            後端 AI 去背處理中...請稍候...
+        </div>
 
         <div class="view-panel">
             <video id="webcam" autoplay playsinline muted></video>
             <canvas id="arCanvas"></canvas>
         </div>
+
     </div>
 
-<script type="module">
-    // 🛑 重新引回官方最新的 Client 模組（維持你最初成功的連線基底）
-    import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1/dist/index.min.js";
+    <script type="module" src="app.js"></script>
 
-    const video = document.getElementById('webcam');
-    const canvas = document.getElementById('arCanvas');
-    const ctx = canvas.getContext('2d');
-    const loadingStatus = document.getElementById('loadingStatus');
-    const sysStatus = document.getElementById('sysStatus');
-    const startBtn = document.getElementById('startBtn');
-    
-    let poseLandmarker = undefined;
-    let currentClothingImage = new Image(); 
-    let isClothLoaded = false;
-    let lastVideoTime = -1;
-    let isCameraRunning = false;
-
-    // 點擊啟動系統
-    startBtn.addEventListener('click', async () => {
-        startBtn.style.display = 'none';
-        sysStatus.textContent = "正在檢查並載入 AI 骨骼追蹤模型...";
-        await initPoseLandmarker();
-    });
-
-    // 1. 初始化 MediaPipe Pose 模型
-    async function initPoseLandmarker() {
-        try {
-            if (!window.vision) {
-                throw new Error("網頁未能成功載入 MediaPipe 核心腳本。");
-            }
-
-            const { PoseLandmarker, FilesetResolver } = window.vision;
-            const visionResolver = await FilesetResolver.forVisionTasks(
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
-            );
-            
-            // 使用 3MB 輕量化模型，避免手機載入超時
-            poseLandmarker = await PoseLandmarker.createFromOptions(visionResolver, {
-                baseOptions: {
-                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite.task`,
-                    delegate: "GPU"
-                },
-                runningMode: "VIDEO",
-                outputSegmentationMasks: false
-            });
-            
-            sysStatus.textContent = "🟢 AI 模型載入成功！正在調用相機鏡頭...";
-            await setupCamera();
-        } catch (err) {
-            sysStatus.textContent = "⚠️ " + err.message + " (系統將切換至無 AI 備用模式，優先點亮鏡頭)";
-            console.error(err);
-            await setupCamera();
-        }
-    }
-
-    // 2. 啟動鏡頭串流
-    async function setupCamera() {
-        try {
-            const constraints = {
-                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, 
-                audio: false 
-            };
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            video.srcObject = stream;
-            
-            const triggerRender = () => {
-                video.play().then(() => {
-                    if (isCameraRunning) return;
-                    isCameraRunning = true;
-                    
-                    canvas.width = video.videoWidth || 640;
-                    canvas.height = video.videoHeight || 480;
-                    
-                    if (poseLandmarker) {
-                        sysStatus.textContent = "✨ 系統準備就緒！請選擇上方衣服進行試穿。";
-                    } else {
-                        sysStatus.textContent = "📷 鏡頭已點亮（AI 停用模式）。";
-                    }
-                    requestAnimationFrame(renderLoop);
-                }).catch(e => {
-                    sysStatus.textContent = "❌ 視訊自動播放受阻，請點擊網頁任意處解鎖。";
-                    document.body.addEventListener('click', () => video.play(), { once: true });
-                });
-            };
-
-            video.addEventListener('loadedmetadata', triggerRender);
-            video.addEventListener('loadeddata', triggerRender);
-            setTimeout(triggerRender, 1200); 
-
-        } catch (err) {
-            sysStatus.textContent = "❌ 無法獲取相機權限：" + err.message;
-            console.error(err);
-        }
-    }
-
-    // 3. 選擇衣服並送去 Hugging Face 去背
-    window.selectCloth = async function(imgSrc, element) {
-        document.querySelectorAll('.preview-box img').forEach(img => img.classList.remove('active'));
-        element.classList.add('active');
-
-        loadingStatus.style.display = "block";
-        loadingStatus.textContent = "後端 AI 去背處理中...請稍候...（預計 3~5 秒）";
-        isClothLoaded = false;
-
-        try {
-            sysStatus.textContent = "正在透過 Gradio SDK 建立安全連線...";
-            
-            // 🛑 修正防禦機制：不直接傳送 Blob，改為將 Fetch 到的影像包裝成標準前端 File 物件
-            // 這樣既可以完美迎合 Gradio Client 的需求，又可以百分之百避開行動端的 Buffer 噴錯！
-            const response = await fetch(imgSrc);
-            const blob = await response.blob();
-            const imageFile = new File([blob], imgSrc, { type: blob.type });
-
-            // 1. 初始化 Gradio Client 連線（指向你的 Space ID）
-            const app = await Client.connect("michaelyo/my-ar-cloth-api");
-
-            // 2. 呼叫後端 /predict 接口，指定精確的欄位名稱 input_image
-            sysStatus.textContent = "後端 AI 正在全力運算中（去背與模特兒肢體消除）...";
-            const result = await app.predict("/predict", { 
-                input_image: imageFile 
-            });
-
-            console.log("Gradio 後端回傳結果:", result);
-
-            // 3. 取得去背後的圖片網址並加載
-            if (result.data && result.data[0]) {
-                const dataObj = result.data[0];
-                
-                // 設定跨域允許
-                currentClothingImage.crossOrigin = "anonymous"; 
-
-                if (dataObj && typeof dataObj === 'object' && dataObj.url) {
-                    currentClothingImage.src = dataObj.url;
-                } else if (typeof dataObj === 'string') {
-                    currentClothingImage.src = dataObj;
-                }
-
-                currentClothingImage.onload = () => {
-                    isClothLoaded = true;
-                    loadingStatus.style.display = "none";
-                    if (poseLandmarker) {
-                        sysStatus.textContent = "✨ 試穿成功！請轉至正面並露出完整雙肩。";
-                    } else {
-                        sysStatus.textContent = "✨ 去背成功！（暫無骨骼追蹤，衣服置中顯示）";
-                    }
-                };
-            } else {
-                throw new Error("後端沒有回傳有效的影像資料。");
-            }
-        } catch (error) {
-            console.error("詳細錯誤訊息:", error);
-            loadingStatus.textContent = "❌ 后端 AI 處理失敗：" + error.message;
-            sysStatus.textContent = "請確認您的 Space 狀態是否為 🟢 Running。";
-        }
-    }
-
-    // 4. 全畫布主導渲染迴圈
-    function renderLoop() {
-        const currentW = video.videoWidth || canvas.width || 640;
-        const currentH = video.videoHeight || canvas.height || 480;
-        if (canvas.width !== currentW) canvas.width = currentW;
-        if (canvas.height !== currentH) canvas.height = currentH;
-
-        // 核心防黑屏：將視訊畫面實時複製並強行渲染到畫布底層
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        let landmarks = null;
-
-        if (poseLandmarker && video.currentTime !== lastVideoTime && video.readyState >= 2) {
-            lastVideoTime = video.currentTime;
-            try {
-                const results = poseLandmarker.detectForVideo(video, performance.now());
-                if (results.landmarks && results.landmarks.length > 0) {
-                    landmarks = results.landmarks[0]; 
-                }
-            } catch (poseErr) {
-                // 忽略
-            }
-        }
-
-        // 情況 A：去背成功 + 成功追蹤到肩膀骨骼 -> 動態套在身上
-        if (isClothLoaded && landmarks) {
-            const leftShoulder = landmarks[11];
-            const rightShoulder = landmarks[12];
-
-            const lx = leftShoulder.x * canvas.width;
-            const ly = leftShoulder.y * canvas.height;
-            const rx = rightShoulder.x * canvas.width;
-            const ry = rightShoulder.y * canvas.height;
-
-            const midX = (lx + rx) / 2;
-            const midY = (ly + ry) / 2;
-
-            const shoulderWidth = Math.sqrt(Math.pow(lx - rx, 2) + Math.pow(ly - ry, 2));
-            const clothWidth = shoulderWidth * 2.1; 
-            const imgScale = currentClothingImage.naturalHeight / currentClothingImage.naturalWidth;
-            const clothHeight = clothWidth * imgScale;
-            const angle = Math.atan2(ly - ry, lx - rx);
-
-            ctx.save();
-            ctx.translate(midX, midY + (clothHeight * 0.12)); 
-            ctx.rotate(angle);
-            ctx.drawImage(currentClothingImage, -clothWidth / 2, -clothHeight * 0.08, clothWidth, clothHeight);
-            ctx.restore();
-        } 
-        // 情況 B：備用模式（去背成功但 AI 骨骼未就緒） -> 至少將衣服畫在畫面中央，不讓使用者摸黑
-        else if (isClothLoaded && !landmarks) {
-            const clothWidth = canvas.width * 0.55;
-            const imgScale = currentClothingImage.naturalHeight / currentClothingImage.naturalWidth;
-            const clothHeight = clothWidth * imgScale;
-            const clothX = (canvas.width - clothWidth) / 2;
-            const clothY = (canvas.height - clothHeight) / 2 + 30;
-            ctx.drawImage(currentClothingImage, clothX, clothY, clothWidth, clothHeight);
-        }
-
-        requestAnimationFrame(renderLoop);
-    }
-</script>
-    
 </body>
 </html>
-
