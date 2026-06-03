@@ -1,5 +1,12 @@
-export function setStatus(msg) {
-    document.getElementById("sysStatus").textContent = msg;
+export function setStatus(text) {
+    const el = document.getElementById("sysStatus");
+
+    if (!el) {
+        console.warn("sysStatus missing");
+        return;
+    }
+
+    el.innerText = text;
 }
 
 export function showLoading(msg) {
