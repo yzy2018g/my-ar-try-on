@@ -3,44 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR 智慧動態試衣間</title>
+    <title>AR Debug Mode</title>
 
     <link rel="stylesheet" href="style.css">
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm/vision_bundle.js"></script>
 </head>
+
 <body>
 
-    <h1>AR 智慧動態試衣間</h1>
+<h1>AR 智慧動態試衣間（DEBUG）</h1>
 
-    <button class="start-btn" id="startBtn">
-        點擊啟動相機與 AI 系統
-    </button>
+<button id="startBtn">啟動</button>
 
-    <div class="status-bar" id="sysStatus">
-        請先點擊上方按鈕啟動系統...
-    </div>
+<div id="debugBox" style="
+    background:#111;
+    color:#00ffcc;
+    padding:10px;
+    margin:10px;
+    font-size:14px;
+    white-space:pre-wrap;
+"></div>
 
-    <div class="container">
+<div id="sysStatus">等待 JS 載入...</div>
 
-        <div class="preview-box">
-            <img src="cloth.png" alt="衣服1" onclick="selectCloth('cloth.png', this)">
-            <img src="style_1.png" alt="衣服2" onclick="selectCloth('style_1.png', this)">
-            <img src="style_2.png" alt="衣服3" onclick="selectCloth('style_2.png', this)">
-        </div>
+<div class="preview-box">
+    <img src="cloth.png" onclick="selectCloth('cloth.png', this)">
+    <img src="style_1.png" onclick="selectCloth('style_1.png', this)">
+    <img src="style_2.png" onclick="selectCloth('style_2.png', this)">
+</div>
 
-        <div id="loadingStatus" class="loading">
-            後端 AI 去背處理中...請稍候...
-        </div>
+<video id="webcam" autoplay playsinline muted></video>
+<canvas id="arCanvas"></canvas>
 
-        <div class="view-panel">
-            <video id="webcam" autoplay playsinline muted></video>
-            <canvas id="arCanvas"></canvas>
-        </div>
+<script>
+/* =========================
+   超級 DEBUG 檢查器
+========================= */
 
-    </div>
+const box = document.getElementById("debugBox");
 
-    <script type="module" src="js/app.js"></script>
+function log(msg) {
+    console.log(msg);
+    box.innerText += msg + "\n";
+}
+
+/* 1. 檢查 JS 是否有進來 */
+log("🔵 HTML 已載入");
+
+/* 2. 捕抓所有 JS error */
+window.onerror = function (msg, src, line, col, err) {
+    log("❌ JS錯誤: " + msg);
+    log("📍位置: " + src + ":" + line);
+};
+
+/* 3. 檢查 module 是否載入 */
+setTimeout(() => {
+    if (!window.appLoaded) {
+        log("❌ app.js 沒有成功執行（可能 404 或 import 壞掉）");
+    }
+}, 3000);
+
+</script>
+
+<!-- 🔥 這裡是關鍵 -->
+<script type="module" src="js/app.js"
+    onerror="document.getElementById('debugBox').innerText += '❌ app.js 載入失敗（404 或路徑錯）'">
+</script>
 
 </body>
 </html>
