@@ -1,12 +1,31 @@
+/* =========================
+   基本設定
+========================= */
 body {
-    font-family: Arial, sans-serif;
-    text-align: center;
-    background: #222;
-    color: white;
     margin: 0;
     padding: 20px;
+    font-family: Arial, sans-serif;
+    background: #222;
+    color: white;
+    text-align: center;
+    overflow-x: hidden;
 }
 
+/* =========================
+   UI 一定要在最上層
+========================= */
+h1,
+button,
+.status-bar,
+.preview-box,
+.container {
+    position: relative;
+    z-index: 10;
+}
+
+/* =========================
+   容器排版
+========================= */
 .container {
     display: flex;
     flex-direction: column;
@@ -14,63 +33,100 @@ body {
     gap: 15px;
 }
 
-/* 衣服預覽 */
-
+/* =========================
+   衣服選擇列
+========================= */
 .preview-box {
     display: flex;
     gap: 10px;
     margin-bottom: 5px;
+    justify-content: center;
 }
 
 .preview-box img {
     width: 80px;
     height: 80px;
     object-fit: cover;
-    border: 2px solid #fff;
-    cursor: pointer;
+    border: 2px solid white;
     border-radius: 8px;
+    cursor: pointer;
     transition: 0.2s;
+}
+
+.preview-box img:hover {
+    transform: scale(1.05);
 }
 
 .preview-box img.active {
     border-color: #00ffcc;
-    transform: scale(1.05);
+    transform: scale(1.1);
 }
 
-/* AR 視窗 */
+/* =========================
+   狀態列
+========================= */
+.status-bar {
+    background: #333;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    min-height: 20px;
+    word-break: break-word;
+}
 
+/* =========================
+   按鈕
+========================= */
+button {
+    padding: 12px 20px;
+    font-size: 16px;
+    background: #00ffcc;
+    color: #222;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+/* =========================
+   AR 視窗（關鍵）
+========================= */
 .view-panel {
     position: relative;
     width: 100%;
     max-width: 640px;
     aspect-ratio: 4 / 3;
-    background: #000;
-    border-radius: 12px;
+    margin-top: 10px;
+    background: black;
     overflow: hidden;
+    border-radius: 12px;
 }
 
+/* =========================
+   video + canvas 疊層
+========================= */
 video,
 canvas {
     position: absolute;
-    top: 0;
-    left: 0;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
 }
 
-canvas {
-    z-index: 10;
-    pointer-events: none;
-}
-
+/* canvas 在 video 上 */
 video {
-    opacity: 0;
-    pointer-events: none;
+    z-index: 1;
+    opacity: 0; /* 想 debug 可改 0.2 */
 }
 
-/* 狀態列 */
+canvas {
+    z-index: 2;
+}
 
+/* =========================
+   loading
+========================= */
 .loading {
     display: none;
     color: #00ffcc;
@@ -78,29 +134,16 @@ video {
     margin: 5px 0;
 }
 
-.status-bar {
-    color: #fff;
-    background: #333;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 14px;
-    margin-bottom: 10px;
-    min-height: 20px;
-    word-break: break-all;
-    border: 1px solid #555;
-}
+/* =========================
+   手機優化
+========================= */
+@media (max-width: 600px) {
+    .preview-box img {
+        width: 65px;
+        height: 65px;
+    }
 
-/* 啟動按鈕 */
-
-.start-btn {
-    padding: 12px 24px;
-    font-size: 16px;
-    background: #00ffcc;
-    color: #222;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: bold;
-    margin-bottom: 15px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    button {
+        width: 90%;
+    }
 }
