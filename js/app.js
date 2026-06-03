@@ -1,7 +1,7 @@
-import { startCamera } from "./camera.js";
-import { initPose } from "./pose.js";
-import { removeBackground } from "./api.js";
-import { setStatus, showLoading, hideLoading } from "./ui.js";
+import { startCamera } from "./js/camera.js";
+import { initPose } from "./js/pose.js";
+import { removeBackground } from "./js/api.js";
+import { setStatus, showLoading, hideLoading } from "./js/ui.js";
 
 /* =========================
    DOM
