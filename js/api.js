@@ -136,3 +136,7 @@ export async function getResult(eventId) {
 
     return text;
 }
+
+window.uploadImage = uploadImage;
+window.runTryOn = runTryOn;
+window.getResult = getResult;
