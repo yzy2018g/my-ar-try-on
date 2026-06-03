@@ -4,7 +4,14 @@ console.log("APP LOADED OK");
 /* =========================
    SAFE IMPORT
 ========================= */
-const uploadImage = window.uploadImage;
+function getAPI() {
+    return {
+        uploadImage: window.uploadImage,
+        runTryOn: window.runTryOn,
+        getResult: window.getResult
+    };
+}
+
 const runTryOn = window.runTryOn;
 const getResult = window.getResult;
 
