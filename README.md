@@ -142,7 +142,8 @@ API 只負責去背（輕量化）
 
 /js
   app.js        主程式（包含 captureFrame）
-  api.js        API 呼叫（去背服務）
+  api
+    /gradio.js        API 呼叫（去背服務）
   renderer.js   AR渲染
   camera.js     攝影機控制
   pose.js       姿態偵測
