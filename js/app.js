@@ -49,43 +49,22 @@ async function onStart() {
     }
 }
 
-window.selectCloth = async function (src, el) {
+window.selectCloth = async (src) => {
 
-    if (isProcessing) return;
-    isProcessing = true;
+    const clothBlob = await (await fetch(src)).blob();
 
-    try {
-        showLoading("AI 試衣中...");
+    const form = new FormData();
+    form.append("file", clothBlob);
 
-        const personFile = await captureFrame(video);
+    const res = await fetch(API + "/process_cloth", {
+        method: "POST",
+        body: form
+    });
 
-        const clothBlob = await (await fetch(src)).blob();
-        const clothFile = new File([clothBlob], "cloth.jpg");
+    const data = await res.json();
 
-        const personPath = await uploadImage(personFile);
-        const clothPath = await uploadImage(clothFile);
-
-        const eventId = await runTryOn(personPath);
-
-        const raw = await getResult(eventId);
-        const data = parseResult(raw);
-
-        const url = data?.url || data?.data?.[0];
-
-        cloth.crossOrigin = "anonymous";
-        cloth.src = url;
-
-        cloth.onload = () => {
-            clothReady = true;
-            hideLoading();
-            setStatus("OK");
-        };
-
-    } catch (e) {
-        error("FLOW", e.message);
-    }
-
-    isProcessing = false;
+    cloth.src = data.url;
+    clothReady = true;
 };
 
 function loop() {
