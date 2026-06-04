@@ -13,6 +13,9 @@ let pose = null;
 let cloth = new Image();
 let clothReady = false;
 
+let currentPrimary = null;
+let currentFallback = null;
+
 window.addEventListener("DOMContentLoaded", initApp);
 
 function initApp() {
@@ -27,6 +30,9 @@ function initApp() {
     startBtn.addEventListener("click", onStart);
 }
 
+/* =========================
+   INIT
+========================= */
 async function onStart() {
     try {
         step("CLICK", "OK");
@@ -54,52 +60,33 @@ async function onStart() {
 }
 
 /* =========================
-   CLOTH ENTRY (STABLE VERSION)
+   CLOTH ENTRY (FIXED FINAL)
 ========================= */
 window.selectCloth = async function (src) {
     try {
         showLoading("衣服去背中...");
         led("led-api", false);
 
-        const rawUrl = await selectClothAPI(src);
+        const raw = await selectClothAPI(src);
 
-        if (!rawUrl) {
+        if (!raw) {
             throw new Error("API 沒回傳圖片");
         }
 
-        step("CLOTH RAW", rawUrl);
+        /* =========================
+           normalize result
+        ========================= */
+        const result = normalizeResult(raw);
 
-        const finalUrl = normalizeGradioUrl(rawUrl);
+        currentPrimary = result.primary;
+        currentFallback = result.fallback;
 
-        step("CLOTH FINAL", finalUrl);
+        step("CLOTH PRIMARY", currentPrimary);
+        step("CLOTH FALLBACK", currentFallback);
 
         clothReady = false;
 
-        cloth = new Image();
-        cloth.crossOrigin = "anonymous";
-
-        const fallbackUrl = finalUrl.replace("/file=", "/gradio_api/file/");
-
-        cloth.onload = () => {
-            clothReady = true;
-            hideLoading();
-            led("led-api", true);
-            setStatus("衣服載入完成 ✓");
-        };
-
-        cloth.onerror = () => {
-            console.warn("fallback triggered");
-
-            if (cloth.src === finalUrl) {
-                cloth.src = fallbackUrl;
-            } else {
-                error("FLOW", "圖片載入失敗");
-                hideLoading();
-                setStatus("❌ 圖片載入失敗");
-            }
-        };
-
-        cloth.src = finalUrl;
+        loadImage(currentPrimary);
 
     } catch (e) {
         error("FLOW", e.message);
@@ -109,19 +96,53 @@ window.selectCloth = async function (src) {
 };
 
 /* =========================
-   URL NORMALIZER
+   IMAGE LOADER (SAFE)
 ========================= */
-function normalizeGradioUrl(path) {
-    if (!path) return null;
+function loadImage(url) {
 
-    if (path.startsWith("http")) return path;
+    cloth = new Image();
+    cloth.crossOrigin = "anonymous";
 
-    let clean = path
-        .replace(/^\/+/, "")
-        .replace(/^tmp\/gradio\//, "")
-        .replace(/^data\//, "");
+    cloth.onload = () => {
+        clothReady = true;
+        hideLoading();
+        led("led-api", true);
+        setStatus("衣服載入完成 ✓");
+    };
 
-    return `https://michaelyo-my-ar-cloth-api.hf.space/file=${clean}`;
+    cloth.onerror = () => {
+
+        console.warn("primary failed:", url);
+
+        if (currentFallback && url !== currentFallback) {
+            step("FALLBACK TRY", currentFallback);
+            loadImage(currentFallback);
+        } else {
+            error("FLOW", "圖片載入失敗");
+            hideLoading();
+            setStatus("❌ 圖片載入失敗");
+        }
+    };
+
+    cloth.src = url;
+}
+
+/* =========================
+   NORMALIZER (MATCH API)
+========================= */
+function normalizeResult(raw) {
+
+    if (typeof raw === "string") {
+        return {
+            primary: raw,
+            fallback: raw.replace("/file=", "/gradio_api/file/")
+        };
+    }
+
+    return {
+        primary: raw?.primary || raw?.url || raw?.data?.[0]?.url || raw?.path,
+        fallback: raw?.fallback || null
+    };
 }
 
 /* =========================
