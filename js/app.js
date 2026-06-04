@@ -1,4 +1,4 @@
-import { uploadImage, runTryOn, getResult, parseResult } from "./api.js";
+import { uploadImage, runTryOn, getResult } from "./api.js";
 import { startCamera } from "./camera.js";
 import { initPose } from "./pose.js";
 import { setStatus, showLoading, hideLoading } from "./ui.js";
@@ -89,4 +89,14 @@ function captureFrame(video) {
     return new Promise(r =>
         c.toBlob(b => r(new File([b], "person.jpg")))
     );
+}
+
+function parseResult(raw) {
+    try {
+        const match = raw?.match(/\{.*\}/s);
+        return match ? JSON.parse(match[0]) : null;
+    } catch (e) {
+        console.error("PARSE ERROR", e);
+        return null;
+    }
 }
