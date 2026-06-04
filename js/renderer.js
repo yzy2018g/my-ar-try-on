@@ -1,13 +1,23 @@
+/* =========================
+   AR RENDER MODULE
+========================= */
+
+import { led } from "./debug.js";
+
 export function drawAR({
     ctx,
     video,
     canvas,
     pose,
-    cloth,
-    clothReady
+    cloth
 }) {
 
-    if (!ctx || !video) return;
+    if (!ctx || !video || !canvas) {
+        console.log("RENDER: missing ctx/video/canvas");
+        return;
+    }
+
+    led("led-render", true);
 
     ctx.drawImage(
         video,
@@ -20,26 +30,73 @@ export function drawAR({
     let lm = null;
 
     if (pose && video.readyState >= 2) {
-
         try {
-
-            const res =
+            const result =
                 pose.detectForVideo(
                     video,
                     performance.now()
                 );
 
-            lm = res.landmarks?.[0] || null;
+            lm = result?.landmarks?.[0] || null;
 
-        } catch (e) {}
+        } catch (e) {
+            console.error("POSE ERROR", e);
+        }
     }
 
-    if (!clothReady || !lm) {
+    /* 圖片是否已載入 */
+    const clothReady =
+        cloth &&
+        cloth.complete &&
+        cloth.naturalWidth > 0;
+
+    if (!clothReady) {
+
+        requestAnimationFrame(() =>
+            drawAR({
+                ctx,
+                video,
+                canvas,
+                pose,
+                cloth
+            })
+        );
+
+        return;
+    }
+
+    if (!lm) {
+
+        requestAnimationFrame(() =>
+            drawAR({
+                ctx,
+                video,
+                canvas,
+                pose,
+                cloth
+            })
+        );
+
         return;
     }
 
     const l = lm[11];
     const r = lm[12];
+
+    if (!l || !r) {
+
+        requestAnimationFrame(() =>
+            drawAR({
+                ctx,
+                video,
+                canvas,
+                pose,
+                cloth
+            })
+        );
+
+        return;
+    }
 
     const lx = l.x * canvas.width;
     const ly = l.y * canvas.height;
@@ -62,8 +119,7 @@ export function drawAR({
         cloth.naturalHeight /
         cloth.naturalWidth;
 
-    const height =
-        width * ratio;
+    const height = width * ratio;
 
     const angle =
         Math.atan2(
@@ -89,4 +145,14 @@ export function drawAR({
     );
 
     ctx.restore();
+
+    requestAnimationFrame(() =>
+        drawAR({
+            ctx,
+            video,
+            canvas,
+            pose,
+            cloth
+        })
+    );
 }
