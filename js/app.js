@@ -118,7 +118,7 @@ window.selectCloth = async function (src) {
 
         const { event_id } = await res.json();
         
-        /* 💡 核心修正點：使用多重嘗試輪詢機制（Polling），確保拿到 complete 狀態 */
+        /* 💡 核心修正點：使用多重嘗試輪詢機制（Polling）並強制指定 GET 方法 */
         let remotePath = null;
         let attempts = 0;
         const maxAttempts = 5; // 最多重複確認 5 次（每次相隔 500ms）
@@ -127,9 +127,16 @@ window.selectCloth = async function (src) {
             attempts++;
             step("FETCH STATUS", `Try ${attempts}`);
 
-            const statusRes = await fetch(`https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/call/predict/status/${event_id}`);
+            // 💡 顯式宣告 method: "GET"，避免瀏覽器殘留的 POST 狀態干擾
+            const statusRes = await fetch(
+                `https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/call/predict/status/${event_id}`,
+                { method: "GET" }
+            );
             
-            if (!statusRes.ok) throw new Error("向後端查詢狀態失敗");
+            // 💡 注入具體的 HTTP 狀態碼回報，如果出錯可一眼看出是 405 還是 404
+            if (!statusRes.ok) {
+                throw new Error(`向後端查詢狀態失敗 (HTTP ${statusRes.status})`);
+            }
             
             const statusText = await statusRes.text();
 
