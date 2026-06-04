@@ -1,9 +1,22 @@
 const BASE = "https://michaelyo-my-ar-cloth-api.hf.space";
 
 /* =========================
-   UPLOAD
+   SMALL HELPERS
+========================= */
+function safeJson(data) {
+    try {
+        return typeof data === "string" ? JSON.parse(data) : data;
+    } catch {
+        return data;
+    }
+}
+
+/* =========================
+   UPLOAD (ROBUST)
 ========================= */
 export async function uploadImage(file) {
+
+    if (!file) throw new Error("NO FILE");
 
     const formData = new FormData();
     formData.append("files", file);
@@ -13,24 +26,31 @@ export async function uploadImage(file) {
         body: formData
     });
 
+    if (!res.ok) {
+        throw new Error("UPLOAD HTTP FAIL");
+    }
+
     const data = await res.json();
 
-    let path = null;
+    const path =
+        data?.[0] ||
+        data?.path ||
+        data?.data?.[0] ||
+        (Array.isArray(data) ? data[0] : null);
 
-    if (Array.isArray(data)) path = data[0];
-    else if (typeof data === "string") path = data;
-    else if (data?.[0]) path = data[0];
-    else if (data?.path) path = data.path;
-
-    if (!path) throw new Error("UPLOAD FAIL");
+    if (!path) {
+        throw new Error("UPLOAD PARSE FAIL");
+    }
 
     return path;
 }
 
 /* =========================
-   RUN
+   RUN TRY ON (ROBUST)
 ========================= */
 export async function runTryOn(personPath) {
+
+    if (!personPath) throw new Error("NO PERSON PATH");
 
     const res = await fetch(`${BASE}/gradio_api/call/v2/predict`, {
         method: "POST",
@@ -43,21 +63,40 @@ export async function runTryOn(personPath) {
         })
     });
 
+    if (!res.ok) {
+        throw new Error("RUN HTTP FAIL");
+    }
+
     const data = await res.json();
 
-    if (!data?.event_id) {
+    const eventId =
+        data?.event_id ||
+        data?.hash ||
+        data?.id;
+
+    if (!eventId) {
         throw new Error("NO EVENT ID");
     }
 
-    return data.event_id;
+    return eventId;
 }
 
 /* =========================
-   RESULT
+   GET RESULT (STREAM SAFE)
 ========================= */
 export async function getResult(eventId) {
 
+    if (!eventId) throw new Error("NO EVENT ID");
+
     const res = await fetch(`${BASE}/gradio_api/call/predict/${eventId}`);
+
+    if (!res.ok) {
+        throw new Error("RESULT HTTP FAIL");
+    }
+
+    if (!res.body) {
+        throw new Error("EMPTY STREAM");
+    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -74,10 +113,32 @@ export async function getResult(eventId) {
 }
 
 /* =========================
-   🔥 CRITICAL: window injection
+   PARSE RESULT (SAFE)
+========================= */
+export function parseResult(raw) {
+
+    if (!raw) return null;
+
+    try {
+        const jsonMatch = raw.match(/\{.*\}/s);
+        if (!jsonMatch) return null;
+
+        return safeJson(jsonMatch[0]);
+
+    } catch (e) {
+        console.error("PARSE FAIL", e);
+        return null;
+    }
+}
+
+/* =========================
+   WINDOW INJECTION (SAFE)
 ========================= */
 window.uploadImage = uploadImage;
 window.runTryOn = runTryOn;
 window.getResult = getResult;
+window.parseResult = parseResult;
 
-console.log("API JS LOADED OK");
+window.API_READY = true;
+
+console.log("API JS LOADED OK (STABLE VERSION)");
