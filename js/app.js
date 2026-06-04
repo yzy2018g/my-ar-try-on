@@ -151,11 +151,20 @@ function normalizeResult(raw) {
 function loop() {
     if (!ctx || !video || !canvas) return;
 
+    let poseResult = null;
+
+    if (pose && video.readyState >= 2) {
+        poseResult = pose.detectForVideo(
+            video,
+            performance.now()
+        );
+    }
+
     drawAR({
         ctx,
         video,
         canvas,
-        pose,
+        poseResult,
         cloth,
         clothReady
     });
