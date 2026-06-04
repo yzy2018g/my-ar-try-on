@@ -80,14 +80,8 @@ window.selectCloth = async function (src) {
         /* 1️⃣ load cloth image */
         const clothBlob = await (await fetch(src)).blob();
 
-                /* 2️⃣ upload cloth to API (Gradio predict) */
-        showLoading("衣服去背中...");
-        
-        // 建立 Gradio 所需的 JSON Payload 格式
-        // 注意：Gradio 接收圖片通常需要將 Blob 轉為 Base64 或透過內部 Uploader，
-        // 但最快且支援跨網域的方法是直接傳送符合 Gradio 規格的 JSON。
-        
-        // 首先，我們需要先將圖片上傳到 Gradio 的臨時上傳區，取得臨時檔名
+        /* 2️⃣ upload cloth to API (Gradio predict) */
+        // 首先將圖片上傳到 Gradio 的臨時上傳區，取得臨時檔名
         const uploadForm = new FormData();
         uploadForm.append("files", clothBlob, "cloth.png");
         
@@ -124,26 +118,43 @@ window.selectCloth = async function (src) {
 
         const { event_id } = await res.json();
         
-        // 輪詢（Polling）或直接請求結果
-        // 由於 rembg 處理速度快，直接請求狀態
-        const statusRes = await fetch(`https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/call/predict/status/${event_id}`);
-        
-        if (!statusRes.ok) throw new Error("取得去背結果失敗");
-        
-        // Gradio 返回的是 SSE 流事件文字，我們需要解析出內部資料
-        const statusText = await statusRes.text();
-        
-        // 從回傳的文字中解析出經由 rembg 處理完的圖片路徑
-        // Gradio 成功時會包含 data: [{"path": "..."}]
-        const match = statusText.match(/"path"\s*:\s*"([^"]+)"/);
-        if (!match || !match[1]) {
-            throw new Error("無法解析去背後的圖片路徑");
+        /* 💡 核心修正點：使用多重嘗試輪詢機制（Polling），確保拿到 complete 狀態 */
+        let remotePath = null;
+        let attempts = 0;
+        const maxAttempts = 5; // 最多重複確認 5 次（每次相隔 500ms）
+
+        while (!remotePath && attempts < maxAttempts) {
+            attempts++;
+            step("FETCH STATUS", `Try ${attempts}`);
+
+            const statusRes = await fetch(`https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/call/predict/status/${event_id}`);
+            
+            if (!statusRes.ok) throw new Error("向後端查詢狀態失敗");
+            
+            const statusText = await statusRes.text();
+
+            // 當 Gradio 回傳的串流內文包含 complete 事件時，才解析路徑
+            if (statusText.includes("complete")) {
+                const match = statusText.match(/"path"\s*:\s*"([^"]+)"/);
+                if (match && match[1]) {
+                    remotePath = match[1];
+                    break;
+                }
+            }
+            
+            // 如果這輪沒拿到結果，等待 500 毫秒後再試
+            if (!remotePath && attempts < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+
+        if (!remotePath) {
+            throw new Error("去背處理逾時或無法解析圖片路徑");
         }
         
         // 拼接成完整的圖片存取網址
         const baseUrl = "https://michaelyo-my-ar-cloth-api.hf.space";
-        const url = `${baseUrl}/file=${match[1]}`;
-
+        const url = `${baseUrl}/file=${remotePath}`;
 
         /* 3️⃣ apply cloth */
         cloth = new Image();
