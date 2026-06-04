@@ -269,8 +269,7 @@ function loop() {
             video,
             canvas,
             pose,
-            cloth,
-            clothReady
+            cloth
         });
 
     } catch (e) {
