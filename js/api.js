@@ -131,6 +131,25 @@ export function parseResult(raw) {
     }
 }
 
+export async function removeBackground(file) {
+
+    const formData = new FormData();
+    formData.append("files", file);
+
+    const res = await fetch(`${BASE}/gradio_api/remove_bg`, {
+        method: "POST",
+        body: formData
+    });
+
+    const data = await res.json();
+
+    const url = data?.url || data?.data?.[0];
+
+    if (!url) throw new Error("NO BG RESULT");
+
+    return url;
+}
+
 /* =========================
    WINDOW INJECTION (SAFE)
 ========================= */
