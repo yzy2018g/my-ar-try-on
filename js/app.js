@@ -149,7 +149,6 @@ function normalizeResult(raw) {
    LOOP
 ========================= */
 function loop() {
-    if (!ctx || !video || !canvas) return;
 
     let poseResult = null;
 
