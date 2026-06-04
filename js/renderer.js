@@ -1,8 +1,6 @@
 /* =========================
-   AR RENDER MODULE
+   AR RENDER MODULE (MOBILE SAFE)
 ========================= */
-
-import { led } from "./debug.js";
 
 export function drawAR({
     ctx,
@@ -12,89 +10,56 @@ export function drawAR({
     cloth
 }) {
 
-    if (!ctx || !video || !canvas) {
-        console.log("RENDER: missing ctx/video/canvas");
-        return;
-    }
+    if (!ctx || !video || !canvas) return;
 
-    led("led-render", true);
+    // 🔥 清畫面（避免殘影 / iOS 錯位）
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    ctx.drawImage(
-        video,
-        0,
-        0,
-        canvas.width,
-        canvas.height
-    );
+    // 背景畫 camera
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     let lm = null;
 
+    // pose detection
     if (pose && video.readyState >= 2) {
         try {
-            const result =
-                pose.detectForVideo(
-                    video,
-                    performance.now()
-                );
-
-            lm = result?.landmarks?.[0] || null;
-
+            const res = pose.detectForVideo(video, performance.now());
+            lm = res?.landmarks?.[0] || null;
         } catch (e) {
-            console.error("POSE ERROR", e);
+            console.log("POSE ERROR", e);
         }
     }
 
-    /* 圖片是否已載入 */
+    // 沒 keypoints → 繼續 loop
+    if (!lm) {
+        requestAnimationFrame(() =>
+            drawAR({ ctx, video, canvas, pose, cloth })
+        );
+        return;
+    }
+
+    // cloth 是否 ready（手機安全版）
     const clothReady =
         cloth &&
         cloth.complete &&
-        cloth.naturalWidth > 0;
+        cloth.naturalWidth > 0 &&
+        cloth.naturalHeight > 0;
 
     if (!clothReady) {
-
         requestAnimationFrame(() =>
-            drawAR({
-                ctx,
-                video,
-                canvas,
-                pose,
-                cloth
-            })
+            drawAR({ ctx, video, canvas, pose, cloth })
         );
-
         return;
     }
 
-    if (!lm) {
-
-        requestAnimationFrame(() =>
-            drawAR({
-                ctx,
-                video,
-                canvas,
-                pose,
-                cloth
-            })
-        );
-
-        return;
-    }
-
+    // 肩膀 keypoints
     const l = lm[11];
     const r = lm[12];
 
     if (!l || !r) {
-
         requestAnimationFrame(() =>
-            drawAR({
-                ctx,
-                video,
-                canvas,
-                pose,
-                cloth
-            })
+            drawAR({ ctx, video, canvas, pose, cloth })
         );
-
         return;
     }
 
@@ -104,16 +69,15 @@ export function drawAR({
     const rx = r.x * canvas.width;
     const ry = r.y * canvas.height;
 
+    // 中心點
     const midX = (lx + rx) / 2;
     const midY = (ly + ry) / 2;
 
-    const shoulder =
-        Math.hypot(
-            lx - rx,
-            ly - ry
-        );
+    // 肩寬
+    const shoulder = Math.hypot(lx - rx, ly - ry);
 
-    const width = shoulder * 2.1;
+    // 衣服大小（可調）
+    const width = shoulder * 2.2;
 
     const ratio =
         cloth.naturalHeight /
@@ -121,12 +85,9 @@ export function drawAR({
 
     const height = width * ratio;
 
-    const angle =
-        Math.atan2(
-            ly - ry,
-            lx - rx
-        );
+    const angle = Math.atan2(ly - ry, lx - rx);
 
+    // 🔥 AR draw
     ctx.save();
 
     ctx.translate(
@@ -146,13 +107,8 @@ export function drawAR({
 
     ctx.restore();
 
+    // next frame
     requestAnimationFrame(() =>
-        drawAR({
-            ctx,
-            video,
-            canvas,
-            pose,
-            cloth
-        })
+        drawAR({ ctx, video, canvas, pose, cloth })
     );
 }
