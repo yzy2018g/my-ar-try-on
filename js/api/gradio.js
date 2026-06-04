@@ -1,9 +1,12 @@
 export async function selectClothAPI(src) {
 
+    /* =========================
+       1️⃣ load image
+    ========================= */
     const clothBlob = await (await fetch(src)).blob();
 
     /* =========================
-       upload
+       2️⃣ upload
     ========================= */
     const uploadForm = new FormData();
     uploadForm.append("files", clothBlob, "cloth.png");
@@ -17,18 +20,18 @@ export async function selectClothAPI(src) {
     );
 
     if (!uploadRes.ok) {
-        throw new Error(`Upload failed (${uploadRes.status})`);
+        throw new Error(`Upload failed ${uploadRes.status}`);
     }
 
     const uploadData = await uploadRes.json();
     const tempPath = uploadData?.[0];
 
     if (!tempPath) {
-        throw new Error("Upload format error");
+        throw new Error("Upload return invalid");
     }
 
     /* =========================
-       predict
+       3️⃣ predict
     ========================= */
     const res = await fetch(
         "https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/call/predict",
@@ -50,19 +53,19 @@ export async function selectClothAPI(src) {
     );
 
     if (!res.ok) {
-        throw new Error(`Predict failed (${res.status})`);
+        throw new Error(`Predict failed ${res.status}`);
     }
 
     const { event_id } = await res.json();
 
     /* =========================
-       SSE polling
+       4️⃣ poll result
     ========================= */
     return await pollResult(event_id);
 }
 
 /* =========================
-   FIXED SSE (no 404)
+   🔥 SSE RESULT PARSER (FIXED)
 ========================= */
 async function pollResult(event_id) {
 
@@ -82,7 +85,7 @@ async function pollResult(event_id) {
         );
 
         if (!res.ok) {
-            throw new Error(`Status error ${res.status}`);
+            throw new Error(`Status ${res.status}`);
         }
 
         const reader = res.body.getReader();
@@ -100,10 +103,32 @@ async function pollResult(event_id) {
             });
 
             if (buffer.includes("complete")) {
-                const match = buffer.match(/"path"\s*:\s*"([^"]+)"/);
-                if (match?.[1]) {
-                    console.log("RAW PATH =", match[1]);
-                    return match[1];
+
+                try {
+                    const jsonMatch = buffer.match(/\{.*\}/s);
+                    if (!jsonMatch) continue;
+
+                    const obj = JSON.parse(jsonMatch[0]);
+
+                    /* =========================
+                       🔥 MOST IMPORTANT FIX
+                    ========================= */
+
+                    const resultUrl =
+                        obj?.url ||
+                        obj?.data?.[0]?.url ||
+                        obj?.data?.[0]?.path ||
+                        obj?.output?.url ||
+                        obj?.output?.path ||
+                        obj?.path;
+
+                    if (!resultUrl) {
+                        throw new Error("No valid result url");
+                    }
+
+                    return normalizeUrl(resultUrl);
+                } catch (e) {
+                    console.warn("parse error", e);
                 }
             }
         }
@@ -112,4 +137,30 @@ async function pollResult(event_id) {
     }
 
     throw new Error("Timeout");
+}
+
+/* =========================
+   🔥 URL NORMALIZER (SAFE)
+========================= */
+function normalizeUrl(path) {
+
+    if (!path) return null;
+
+    if (path.startsWith("http")) return path;
+
+    let clean = path
+        .replace(/^\/+/, "")
+        .replace(/^tmp\/gradio\//, "")
+        .replace(/^data\//, "");
+
+    /* =========================
+       ⚠️ fallback strategy order:
+       1. file=
+       2. gradio_api/file/
+    ========================= */
+
+    return {
+        primary: `https://michaelyo-my-ar-cloth-api.hf.space/file=${clean}`,
+        fallback: `https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/file/${clean}`
+    };
 }
