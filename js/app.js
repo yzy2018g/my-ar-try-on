@@ -120,7 +120,7 @@ function normalizeGradioUrl(path) {
         .replace(/^data\//, "");
 
     // 🔥 most stable endpoint for HF Gradio
-    return `https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/file/${clean}`;
+    return `https://michaelyo-my-ar-cloth-api.hf.space/file=${clean}`;
 }
 
 /* =========================
