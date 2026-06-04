@@ -102,7 +102,8 @@ async function pollResult(event_id) {
             if (buffer.includes("complete")) {
                 const match = buffer.match(/"path"\s*:\s*"([^"]+)"/);
                 if (match?.[1]) {
-                    return `https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/file/${match[1]}`;
+                    console.log("RAW PATH =", match[1]);
+                    return match[1];
                 }
             }
         }
