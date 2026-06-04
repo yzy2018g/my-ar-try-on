@@ -91,7 +91,7 @@ form-data： file：衣服圖片
 {
   "url": "https://.../transparent.png"
 }
-``` id="json01"
+```
 
 ---
 
