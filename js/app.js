@@ -64,10 +64,9 @@ async function onStart() {
 }
 
 /* =========================
-   CLOTH SELECT → API REMOVE BG
+   CLOTH SELECT → GRADIO API
 ========================= */
 window.selectCloth = async function (src) {
-
     if (isProcessing) return;
     isProcessing = true;
 
@@ -77,29 +76,46 @@ window.selectCloth = async function (src) {
         showLoading("衣服去背中...");
         led("led-api", false);
 
-        /* 1️⃣ load cloth image */
+        /* =========================
+           1️⃣ load image
+        ========================= */
         const clothBlob = await (await fetch(src)).blob();
 
-        /* 2️⃣ upload cloth to API (Gradio predict) */
-        // 首先將圖片上傳到 Gradio 的臨時上傳區，取得臨時檔名
+        /* =========================
+           2️⃣ upload to Gradio
+        ========================= */
         const uploadForm = new FormData();
         uploadForm.append("files", clothBlob, "cloth.png");
-        
-        const uploadRes = await fetch("https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/upload", {
-            method: "POST",
-            body: uploadForm
-        });
-        
-        if (!uploadRes.ok) throw new Error("Gradio 上傳臨時檔失敗");
+
+        const uploadRes = await fetch(
+            "https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/upload",
+            {
+                method: "POST",
+                body: uploadForm
+            }
+        );
+
+        if (!uploadRes.ok) {
+            throw new Error(`Upload failed (${uploadRes.status})`);
+        }
+
         const uploadData = await uploadRes.json();
-        const tempPath = uploadData[0]; // 取得類似 "/tmp/gradio/xxx.png"
-        
-        // 發起 Gradio 任務預測
+        const tempPath = uploadData?.[0];
+
+        if (!tempPath) {
+            throw new Error("Upload 回傳錯誤");
+        }
+
+        /* =========================
+           3️⃣ call predict
+        ========================= */
         const res = await fetch(
             "https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/call/predict",
             {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json"
+                },
                 body: JSON.stringify({
                     data: [{
                         path: tempPath,
@@ -113,57 +129,74 @@ window.selectCloth = async function (src) {
         );
 
         if (!res.ok) {
-            throw new Error("API 發起去背任務失敗");
+            throw new Error(`Predict failed (${res.status})`);
         }
 
         const { event_id } = await res.json();
-        
-        /* 💡 核心修正點：使用多重嘗試輪詢機制（Polling）並強制指定 GET 方法 */
+
+        /* =========================
+           4️⃣ SSE polling (FIXED 404)
+        ========================= */
         let remotePath = null;
         let attempts = 0;
-        const maxAttempts = 5; // 最多重複確認 5 次（每次相隔 500ms）
+        const maxAttempts = 10;
 
         while (!remotePath && attempts < maxAttempts) {
             attempts++;
             step("FETCH STATUS", `Try ${attempts}`);
 
-            // 💡 顯式宣告 method: "GET"，避免瀏覽器殘留的 POST 狀態干擾
             const statusRes = await fetch(
-                `https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/call/predict/status/${event_id}`,
-                { method: "GET" }
+                `https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/call/predict/${event_id}`,
+                {
+                    method: "GET",
+                    headers: {
+                        "Accept": "text/event-stream"
+                    }
+                }
             );
-            
-            // 💡 注入具體的 HTTP 狀態碼回報，如果出錯可一眼看出是 405 還是 404
-            if (!statusRes.ok) {
-                throw new Error(`向後端查詢狀態失敗 (HTTP ${statusRes.status})`);
-            }
-            
-            const statusText = await statusRes.text();
 
-            // 當 Gradio 回傳的串流內文包含 complete 事件時，才解析路徑
-            if (statusText.includes("complete")) {
-                const match = statusText.match(/"path"\s*:\s*"([^"]+)"/);
-                if (match && match[1]) {
-                    remotePath = match[1];
-                    break;
+            if (!statusRes.ok) {
+                throw new Error(`Status error HTTP ${statusRes.status}`);
+            }
+
+            const reader = statusRes.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+
+            let buffer = "";
+            let done = false;
+
+            while (!done) {
+                const { value, done: d } = await reader.read();
+                done = d;
+
+                buffer += decoder.decode(value || new Uint8Array(), {
+                    stream: true
+                });
+
+                if (buffer.includes("complete")) {
+                    const match = buffer.match(/"path"\s*:\s*"([^"]+)"/);
+                    if (match?.[1]) {
+                        remotePath = match[1];
+                        break;
+                    }
                 }
             }
-            
-            // 如果這輪沒拿到結果，等待 500 毫秒後再試
-            if (!remotePath && attempts < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 500));
+
+            if (!remotePath) {
+                await new Promise(r => setTimeout(r, 400));
             }
         }
 
         if (!remotePath) {
-            throw new Error("去背處理逾時或無法解析圖片路徑");
+            throw new Error("去背超時");
         }
-        
-        // 拼接成完整的圖片存取網址
+
+        /* =========================
+           5️⃣ load result image
+        ========================= */
         const baseUrl = "https://michaelyo-my-ar-cloth-api.hf.space";
         const url = `${baseUrl}/file=${remotePath}`;
 
-        /* 3️⃣ apply cloth */
         cloth = new Image();
         cloth.crossOrigin = "anonymous";
         cloth.src = url;
@@ -176,7 +209,7 @@ window.selectCloth = async function (src) {
         };
 
         cloth.onerror = () => {
-            throw new Error("CLOTH LOAD FAIL");
+            throw new Error("圖片載入失敗");
         };
 
     } catch (e) {
@@ -194,7 +227,6 @@ window.selectCloth = async function (src) {
    LOOP (AR RENDER)
 ========================= */
 function loop() {
-
     if (!ctx || !video || !canvas) return;
 
     drawAR({
