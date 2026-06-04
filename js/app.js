@@ -54,49 +54,31 @@ async function onStart() {
 }
 
 /* =========================
-   CLOTH ENTRY (FINAL FIXED)
+   CLOTH ENTRY (STABLE VERSION)
 ========================= */
 window.selectCloth = async function (src) {
     try {
         showLoading("衣服去背中...");
         led("led-api", false);
 
-        /* =========================
-           1️⃣ get backend result url
-        ========================= */
         const rawUrl = await selectClothAPI(src);
 
         if (!rawUrl) {
-            throw new Error("API 沒回傳圖片路徑");
+            throw new Error("API 沒回傳圖片");
         }
 
         step("CLOTH RAW", rawUrl);
 
-        /* =========================
-           2️⃣ normalize url (keep fallback)
-        ========================= */
         const finalUrl = normalizeGradioUrl(rawUrl);
 
         step("CLOTH FINAL", finalUrl);
 
         clothReady = false;
 
-        /* =========================
-           3️⃣ 🔥 FIX: use blob (NO CORS ISSUE)
-        ========================= */
-        const res = await fetch(finalUrl);
-        if (!res.ok) {
-            throw new Error("圖片下載失敗 HTTP " + res.status);
-        }
-
-        const blob = await res.blob();
-        const objectUrl = URL.createObjectURL(blob);
-
-        /* =========================
-           4️⃣ render image
-        ========================= */
         cloth = new Image();
         cloth.crossOrigin = "anonymous";
+
+        const fallbackUrl = finalUrl.replace("/file=", "/gradio_api/file/");
 
         cloth.onload = () => {
             clothReady = true;
@@ -106,12 +88,18 @@ window.selectCloth = async function (src) {
         };
 
         cloth.onerror = () => {
-            error("FLOW", "blob 圖片載入失敗");
-            hideLoading();
-            setStatus("❌ 圖片載入失敗");
+            console.warn("fallback triggered");
+
+            if (cloth.src === finalUrl) {
+                cloth.src = fallbackUrl;
+            } else {
+                error("FLOW", "圖片載入失敗");
+                hideLoading();
+                setStatus("❌ 圖片載入失敗");
+            }
         };
 
-        cloth.src = objectUrl;
+        cloth.src = finalUrl;
 
     } catch (e) {
         error("FLOW", e.message);
@@ -121,7 +109,7 @@ window.selectCloth = async function (src) {
 };
 
 /* =========================
-   🔥 URL NORMALIZER
+   URL NORMALIZER
 ========================= */
 function normalizeGradioUrl(path) {
     if (!path) return null;
