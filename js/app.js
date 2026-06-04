@@ -54,19 +54,33 @@ async function onStart() {
 }
 
 /* =========================
-   CLOTH ENTRY
+   CLOTH ENTRY (FIXED)
 ========================= */
 window.selectCloth = async function (src) {
     try {
         showLoading("衣服去背中...");
         led("led-api", false);
 
-        const url = await selectClothAPI(src);
+        const rawUrl = await selectClothAPI(src);
+
+        if (!rawUrl) {
+            throw new Error("API 沒回傳圖片路徑");
+        }
+
+        step("CLOTH URL", rawUrl);
+
+        const finalUrl = normalizeGradioUrl(rawUrl);
+
+        step("CLOTH FINAL", finalUrl);
+
+        clothReady = false;
 
         cloth = new Image();
         cloth.crossOrigin = "anonymous";
-        cloth.src = url;
 
+        /* =========================
+           IMPORTANT: preload check
+        ========================= */
         cloth.onload = () => {
             clothReady = true;
             hideLoading();
@@ -74,9 +88,14 @@ window.selectCloth = async function (src) {
             setStatus("衣服載入完成 ✓");
         };
 
-        cloth.onerror = () => {
-            throw new Error("圖片載入失敗");
+        cloth.onerror = (e) => {
+            console.error("IMAGE LOAD FAIL:", finalUrl);
+            error("FLOW", "圖片載入失敗: " + finalUrl);
+            hideLoading();
+            setStatus("❌ 圖片載入失敗");
         };
+
+        cloth.src = finalUrl;
 
     } catch (e) {
         error("FLOW", e.message);
@@ -85,6 +104,28 @@ window.selectCloth = async function (src) {
     }
 };
 
+/* =========================
+   🔥 FIX: Gradio URL NORMALIZER
+========================= */
+function normalizeGradioUrl(path) {
+    if (!path) return null;
+
+    // already full url
+    if (path.startsWith("http")) return path;
+
+    // clean internal formats
+    let clean = path
+        .replace(/^\/+/, "")
+        .replace(/^tmp\/gradio\//, "")
+        .replace(/^data\//, "");
+
+    // 🔥 most stable endpoint for HF Gradio
+    return `https://michaelyo-my-ar-cloth-api.hf.space/gradio_api/file/${clean}`;
+}
+
+/* =========================
+   LOOP
+========================= */
 function loop() {
     if (!ctx || !video || !canvas) return;
 
