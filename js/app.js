@@ -4,6 +4,10 @@ import { setStatus, showLoading, hideLoading } from "./ui.js";
 import { log, step, error, led, safeGetEl } from "./debug.js";
 import { drawAR } from "./renderer.js";
 import { selectClothAPI } from "./api/gradio.js";
+import {
+    initPoseDebug,
+    updatePoseDebug
+} from "./debugPoseOverlay.js";
 
 window.appLoaded = true;
 
@@ -28,6 +32,8 @@ function initApp() {
     log("INIT APP READY");
 
     startBtn.addEventListener("click", onStart);
+
+    initPoseDebug();
 }
 
 /* =========================
@@ -161,4 +167,6 @@ function loop() {
     });
 
     requestAnimationFrame(loop);
+
+    updatePoseDebug(poseResult);
 }
