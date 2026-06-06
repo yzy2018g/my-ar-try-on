@@ -1,1 +1,135 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
+body {
+  font-family: Arial, sans-serif;
+  background: #000;
+  color: #fff;
+  overflow: hidden;
+}
+
+/* 整體容器 */
+#app {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+/* Header */
+.header {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 16px;
+  z-index: 10;
+  color: #00ffcc;
+}
+
+/* Camera 區域 */
+.camera-container {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* video 畫面 */
+#video {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* 鏡像效果（自拍感） */
+}
+
+/* AR canvas */
+#canvas {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+/* 衣服選單 */
+.clothes-panel {
+  position: absolute;
+  bottom: 80px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  z-index: 20;
+  padding: 10px;
+}
+
+/* 單一衣服卡片 */
+.cloth-item {
+  width: 70px;
+  height: 90px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 6px;
+  text-align: center;
+  cursor: pointer;
+  transition: 0.2s;
+  border: 2px solid transparent;
+}
+
+.cloth-item img {
+  width: 100%;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.cloth-item span {
+  font-size: 10px;
+  display: block;
+  margin-top: 4px;
+  color: #ccc;
+}
+
+/* hover */
+.cloth-item:hover {
+  transform: translateY(-4px);
+  border-color: #00ffcc;
+}
+
+/* 選中狀態 */
+.cloth-item.active {
+  border-color: #00ffcc;
+  box-shadow: 0 0 10px #00ffcc;
+}
+
+/* 控制按鈕 */
+.controls {
+  position: absolute;
+  bottom: 10px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  z-index: 30;
+}
+
+button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #00ffcc;
+  color: #000;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+button:hover {
+  background: #00ccaa;
+}
