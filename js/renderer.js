@@ -112,6 +112,10 @@ export function render(pose) {
 
   ctx.fillStyle = "red";
   ctx.fillRect(centerX, centerY, 20, 20);
+
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle = "red";
+  ctx.fillRect(100, 100, 50, 50);
   // ==============================
   // 2. 計算肩寬（決定衣服大小）
   // ==============================
