@@ -15,8 +15,6 @@ export function initRenderer() {
 }
 
 function loadCloth(src) {
-  console.log("loading cloth:", src);
-
   clothReady = false;
 
   clothImg = new Image();
@@ -48,7 +46,6 @@ function resizeCanvas() {
 
 export function setCloth(src) {
   console.log("setCloth:", src);
-
   currentCloth = src;
   loadCloth(src);
 }
@@ -56,24 +53,19 @@ export function setCloth(src) {
 export function render(pose) {
   const debug = document.getElementById("debugPanel");
 
-  if (debug) {
-    debug.innerText =
-      "RENDER\n" +
-      "clothReady: " + clothReady + "\n" +
-      "size: " + clothImg.naturalWidth + "x" + clothImg.naturalHeight;
-  }
-
-  if (!pose) return;
-
-  if (!clothReady) return; // 🔥 關鍵修正
+  if (!pose || !clothReady) return;
 
   const left = pose.leftShoulder;
   const right = pose.rightShoulder;
 
   if (!left || !right) return;
 
+  // ====== BODY ANCHOR ======
   const centerX = (left.x + right.x) / 2;
-  const centerY = (left.y + right.y) / 2;
+
+  // 🔥 關鍵修正：往下移（避免衣服太高/上下錯）
+  const centerY =
+    (left.y + right.y) / 2 + Math.hypot(right.x - left.x, right.y - left.y) * 0.3;
 
   const shoulderWidth = Math.hypot(
     right.x - left.x,
@@ -85,19 +77,30 @@ export function render(pose) {
     right.x - left.x
   );
 
-  const clothWidth = shoulderWidth * 2.2;
-  const clothHeight = clothWidth * 1.2;
+  const clothWidth = shoulderWidth * 1.8;
+  const clothHeight = clothWidth * 1.3;
 
+  // ====== DEBUG ======
+  if (debug) {
+    debug.innerText =
+      "RENDER OK\n" +
+      "clothReady: " + clothReady + "\n" +
+      "size: " + clothImg.naturalWidth + "x" + clothImg.naturalHeight;
+  }
+
+  // ====== DRAW ======
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   ctx.save();
+
   ctx.translate(centerX, centerY);
   ctx.rotate(angle);
 
+  // 🔥 關鍵：anchor 改成「肩膀上方」
   ctx.drawImage(
     clothImg,
     -clothWidth / 2,
-    -clothHeight * 0.3,
+    0,
     clothWidth,
     clothHeight
   );
