@@ -2,6 +2,7 @@ let canvas, ctx;
 let clothImg = new Image();
 
 let currentCloth = "style_1.png";
+let clothReady = false;
 
 export function initRenderer() {
   canvas = document.getElementById("canvas");
@@ -13,18 +14,21 @@ export function initRenderer() {
   window.addEventListener("resize", resizeCanvas);
 }
 
-/* 🔥 統一 loading（重點修正） */
 function loadCloth(src) {
   console.log("loading cloth:", src);
+
+  clothReady = false;
 
   clothImg = new Image();
 
   clothImg.onload = () => {
     console.log("CLOTH LOADED:", src);
+    clothReady = true;
   };
 
   clothImg.onerror = () => {
     console.log("CLOTH FAILED:", src);
+    clothReady = false;
   };
 
   clothImg.src = `assets/clothes/${src}`;
@@ -35,7 +39,6 @@ function resizeCanvas() {
 
   if (!video) return;
 
-  // 🔥 強制同步尺寸（避免 0x0）
   const w = video.videoWidth || 640;
   const h = video.videoHeight || 480;
 
@@ -51,24 +54,23 @@ export function setCloth(src) {
 }
 
 export function render(pose) {
+  const debug = document.getElementById("debugPanel");
+
+  if (debug) {
+    debug.innerText =
+      "RENDER\n" +
+      "clothReady: " + clothReady + "\n" +
+      "size: " + clothImg.naturalWidth + "x" + clothImg.naturalHeight;
+  }
+
   if (!pose) return;
+
+  if (!clothReady) return; // 🔥 關鍵修正
 
   const left = pose.leftShoulder;
   const right = pose.rightShoulder;
 
   if (!left || !right) return;
-
-  // 🔥 debug（用畫面顯示，不靠 console）
-  const debug = document.getElementById("debugPanel");
-  if (debug) {
-    debug.innerText =
-      "RENDER OK\ncloth:" +
-      clothImg.src +
-      "\nsize:" +
-      clothImg.naturalWidth +
-      "x" +
-      clothImg.naturalHeight;
-  }
 
   const centerX = (left.x + right.x) / 2;
   const centerY = (left.y + right.y) / 2;
