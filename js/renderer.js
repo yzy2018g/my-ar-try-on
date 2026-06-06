@@ -128,7 +128,7 @@ export function render(pose) {
   const angle = Math.atan2(
     right.y - left.y,
     right.x - left.x
-  );
+  )+ Math.PI;
 
   // ==============================
   // 4. 衣服尺寸 scaling
