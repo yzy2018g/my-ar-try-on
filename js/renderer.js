@@ -164,12 +164,14 @@ export function render(pose) {
   ctx.rotate(angle);
 
   // 畫衣服（anchor 在肩膀附近）
-  ctx.drawImage(
+  ctx.translate(centerX, centerY);
+
+ctx.drawImage(
   clothImg,
-  100,
-  100,
-  200,
-  200
+  -clothWidth / 2,
+  0,
+  clothWidth,
+  clothHeight
 );
 
   ctx.restore();
