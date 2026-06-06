@@ -157,9 +157,6 @@ export function render(pose) {
 
   ctx.save();
 
-  // 移動到人體 anchor
-  ctx.translate(centerX, centerY);
-
   // 旋轉衣服（跟肩膀角度一致）
   ctx.rotate(angle);
 
