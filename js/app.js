@@ -36,6 +36,11 @@ async function main() {
   loop();
 }
 
+function debug(msg) {
+  const el = document.getElementById("debugPanel");
+  if (el) el.innerText = msg;
+}
+
 // 衣服切換 UI
 function setupClothesUI() {
   const items = document.querySelectorAll(".cloth-item");
