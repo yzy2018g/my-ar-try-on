@@ -1,221 +1,62 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>DeepFashion 智能雲端試衣鏡</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AR Try-On (Phase 1)</title>
 
-  <script>
-    window.print = function () {
-      console.log('print blocked');
-    };
-
-    window.addEventListener('keydown', function (e) {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-      }
-    }, true);
-  </script>
-
-  <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
-  <style>
-    body { margin:0; overflow:hidden; background:#000; }
-    .ui-layer { position:absolute; z-index:999; }
-    .scrollbar-none::-webkit-scrollbar { display:none; }
-  </style>
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 
 <body>
-<div id="app" class="w-screen h-screen relative">
 
-  <!-- UI -->
-  <div v-if="currentCloth"
-       class="ui-layer top-4 left-4 right-4 bg-black/70 p-4 rounded-xl text-white">
-    <div class="text-xs text-amber-400">{{ aiStatus }}</div>
-    <div class="text-sm">{{ aiMessage }}</div>
-  </div>
+  <!-- App Container -->
+  <div id="app">
 
-  <!-- camera -->
-  <video id="input_video" autoplay playsinline style="display:none;"></video>
-  <canvas id="output_canvas" class="w-full h-full"></canvas>
+    <!-- Header -->
+    <header class="header">
+      AR Virtual Try-On (Phase 1)
+    </header>
 
-  <!-- clothes -->
-  <div class="ui-layer bottom-10 left-0 right-0 flex justify-center space-x-3">
-    <div v-for="cloth in clothesList"
-         :key="cloth.id"
-         @click="selectAndProcessCloth(cloth)"
-         class="bg-black/80 p-2 rounded-lg cursor-pointer text-center w-24">
+    <!-- Camera Section -->
+    <div class="camera-container">
 
-      <img :src="cloth.src" class="w-full h-16 object-contain">
-      <div class="text-[10px] text-amber-300">{{ cloth.styleName }}</div>
+      <!-- 原始影像 -->
+      <video id="video" autoplay playsinline></video>
+
+      <!-- AR疊圖 -->
+      <canvas id="canvas"></canvas>
+
     </div>
+
+    <!-- Clothes Selector -->
+    <div class="clothes-panel">
+
+      <div class="cloth-item" data-cloth="style_1.png">
+        <img src="assets/clothes/style_1.png" />
+        <span>Style 1</span>
+      </div>
+
+      <div class="cloth-item" data-cloth="style_2.png">
+        <img src="assets/clothes/style_2.png" />
+        <span>Style 2</span>
+      </div>
+
+    </div>
+
+    <!-- Control Buttons -->
+    <div class="controls">
+      <button id="btn-reset">Reset</button>
+      <button id="btn-screenshot">Screenshot</button>
+    </div>
+
   </div>
 
-</div>
-
-<script>
-window.clothImage = new Image();
-window.clothImage.crossOrigin = "anonymous";
-
-window.clothParams = {
-  shoulderWidthPercent: 0.65,
-  offsetFromTopPercent: 0.12
-};
-
-window.isImgLoaded = false;
-window.clothImage.onload = () => window.isImgLoaded = true;
-
-new Vue({
-  el: '#app',
-  data: {
-    aiStatus: '連線中',
-    aiMessage: '初始化...',
-    currentCloth: null,
-
-    githubBaseUrl: "https://yzy2018g.github.io/my-ar-filter/",
-
-    clothesList: [
-      { id: 1, styleName: "日系休閒", src: "style_1.png" },
-      { id: 2, styleName: "韓系大衣", src: "style_2.png" }
-    ],
-
-    cameraStarted: false
-  },
-
-  mounted() {
-    this.selectAndProcessCloth(this.clothesList[0]);
-    this.initAR();
-  },
-
-  methods: {
-
-    selectAndProcessCloth(cloth) {
-
-      if (this.aiStatus === 'AI 運算中...') return;
-
-      this.currentCloth = cloth;
-      this.aiStatus = 'AI 運算中...';
-
-      const absoluteImgUrl = new URL(cloth.src, this.githubBaseUrl).href;
-      this.aiMessage = "送出 AI 推論...";
-
-      const hfApiUrl = "https://michaelyo-my-ar-cloth-api.hf.space/api/predict";
-
-      fetch(hfApiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: [absoluteImgUrl] })
-      })
-      .then(r => r.json())
-      .then(res => {
-
-        if (!Array.isArray(res.data) || res.data.length < 4) {
-          throw new Error("bad response");
-        }
-
-        const [, img, shoulder, offset] = res.data;
-
-        window.clothImage.src = img;
-        window.clothParams = {
-          shoulderWidthPercent: shoulder,
-          offsetFromTopPercent: offset
-        };
-
-        this.aiStatus = "就緒";
-        this.aiMessage = "AI 載入完成";
-
-      })
-      .catch(err => {
-        console.error(err);
-        this.aiStatus = "錯誤";
-        this.aiMessage = "AI 連線失敗";
-      });
-    },
-
-    initAR() {
-      const video = document.getElementById('input_video');
-      const canvas = document.getElementById('output_canvas');
-      const ctx = canvas.getContext('2d');
-
-      const pose = new Pose({
-        locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`
-      });
-
-      pose.setOptions({
-        modelComplexity: 1,
-        smoothLandmarks: true,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-      });
-
-      pose.onResults(results => {
-
-        if (!results.poseLandmarks) return;
-
-        if (!this.cameraStarted) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          this.cameraStarted = true;
-        }
-
-        ctx.setTransform(1,0,0,1,0,0);
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-
-        ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-
-        if (!window.isImgLoaded) return;
-
-        const lm = results.poseLandmarks;
-        const L = lm[11], R = lm[12];
-
-        const dx = (L.x - R.x) * canvas.width;
-        const dy = (L.y - R.y) * canvas.height;
-
-        const shoulderDist = Math.sqrt(dx*dx + dy*dy);
-
-        const clothW = shoulderDist / window.clothParams.shoulderWidthPercent;
-        const clothH = clothW * (window.clothImage.height / window.clothImage.width);
-
-        const cx = ((L.x + R.x)/2) * canvas.width;
-        const cy = ((L.y + R.y)/2) * canvas.height;
-
-        const angle = Math.atan2(dy, dx);
-
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(angle);
-
-        ctx.drawImage(
-          window.clothImage,
-          -clothW/2,
-          -clothH*0.1,
-          clothW,
-          clothH
-        );
-
-        ctx.restore();
-      });
-
-      const camera = new Camera(video, {
-        onFrame: async () => {
-          await pose.send({ image: video });
-        },
-        width: 1280,
-        height: 720
-      });
-
-      camera.start().catch(err => {
-        console.error("camera error:", err);
-      });
-    }
-  }
-});
-</script>
+  <!-- JS Modules -->
+  <script src="js/camera.js"></script>
+  <script src="js/pose.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/app.js"></script>
 
 </body>
 </html>
