@@ -16,7 +16,7 @@
 ---
 
 系統架構
-
+```
 GitHub Pages (Frontend)
 │
 ├─ Camera
@@ -30,6 +30,7 @@ GitHub Pages (Frontend)
       ├─ Background Removal
       ├─ Human Body Removal
       └─ Transparent PNG Output
+```
 
 ---
 
