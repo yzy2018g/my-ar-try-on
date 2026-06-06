@@ -103,7 +103,8 @@ export function render(pose) {
   const right = pose.rightShoulder;
 
   if (!left || !right) return;
-
+  left.x = 1 - left.x;
+  right.x = 1 - right.x;
   // ==============================
   // 1. 計算人體 anchor（肩膀中心）
   // ==============================
@@ -128,7 +129,7 @@ export function render(pose) {
   const angle = Math.atan2(
     right.y - left.y,
     right.x - left.x
-  )+ Math.PI;
+  );
 
   // ==============================
   // 4. 衣服尺寸 scaling
