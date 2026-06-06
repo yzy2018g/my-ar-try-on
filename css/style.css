@@ -57,6 +57,19 @@ body {
   pointer-events: none;
 }
 
+#debugPanel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 99999;
+  background: rgba(0, 0, 0, 0.7);
+  color: #00ffcc;
+  font-size: 12px;
+  padding: 8px;
+  max-width: 100%;
+  white-space: pre-line;
+}
+
 /* 衣服選單 */
 .clothes-panel {
   position: absolute;
