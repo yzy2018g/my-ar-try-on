@@ -167,12 +167,12 @@ export function render(pose) {
 
   // 畫衣服（anchor 在肩膀附近）
   ctx.drawImage(
-    clothImg,
-    -clothWidth / 2,
-    -clothHeight * 0.5,
-    clothWidth,
-    clothHeight
-  );
+  clothImg,
+  100,
+  100,
+  200,
+  200
+);
 
   ctx.restore();
 }
