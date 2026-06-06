@@ -103,9 +103,7 @@ export function render(pose) {
   const right = pose.rightShoulder;
 
   if (!left || !right) return;
-  ctx.save();
-  ctx.scale(-1, 1);
-  ctx.translate(-canvas.width, 0);
+  
   // ==============================
   // 1. 計算人體 anchor（肩膀中心）
   // ==============================
