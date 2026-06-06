@@ -107,13 +107,11 @@ export function render(pose) {
   // ==============================
   // 1. 計算人體 anchor（肩膀中心）
   // ==============================
-  const centerX = (left.x + right.x) / 2;
+  const centerX = ((left.x + right.x) / 2) * canvas.width;
+  const centerY = ((left.y + right.y) / 2) * canvas.height;
 
-  // 🔥 往下移動（讓衣服貼胸口）
-  const centerY =
-    (left.y + right.y) / 2 +
-    Math.hypot(right.x - left.x, right.y - left.y) * 0.3;
-
+  ctx.fillStyle = "red";
+  ctx.fillRect(centerX, centerY, 20, 20);
   // ==============================
   // 2. 計算肩寬（決定衣服大小）
   // ==============================
