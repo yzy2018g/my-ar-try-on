@@ -4,28 +4,40 @@ import { initRenderer, render, setCloth } from "./renderer.js";
 
 let currentPose = null;
 
-async function main() {
-  console.log("Starting AR Try-On...");
+/* ---------------- DEBUG ---------------- */
+function debug(msg) {
+  const el = document.getElementById("debugPanel");
+  if (el) el.innerText = msg;
+  console.log(msg);
+}
 
-  // 1. 初始化 Camera
+/* ---------------- MAIN ---------------- */
+async function main() {
+  debug("APP START");
+
+  // 1. Camera
   const video = await initCamera();
   if (!video) {
-    console.error("Camera init failed");
+    debug("CAMERA FAIL");
     return;
   }
+  debug("CAMERA OK");
 
-  // 2. 初始化 Renderer
+  // 2. Renderer
   initRenderer();
+  debug("RENDERER OK");
 
-  // 3. 初始化 Pose（把資料丟回來）
+  // 3. Pose
   await initPose(video, (poseData) => {
     currentPose = poseData;
   });
+  debug("POSE OK");
 
-  // 4. 綁定衣服切換 UI
+  // 4. UI
   setupClothesUI();
+  debug("UI READY");
 
-  // 5. Render Loop
+  // 5. Render loop
   function loop() {
     if (currentPose) {
       render(currentPose);
@@ -36,45 +48,47 @@ async function main() {
   loop();
 }
 
-function debug(msg) {
-  const el = document.getElementById("debugPanel");
-  if (el) el.innerText = msg;
-}
-
-// 衣服切換 UI
+/* ---------------- UI ---------------- */
 function setupClothesUI() {
   const items = document.querySelectorAll(".cloth-item");
+
+  debug("cloth items: " + items.length);
+
+  if (!items || items.length === 0) {
+    debug("NO CLOTH ITEMS FOUND");
+    return;
+  }
 
   items.forEach((item) => {
     item.addEventListener("click", () => {
       const cloth = item.getAttribute("data-cloth");
 
-      console.log("Switch cloth:", cloth);
+      debug("CLICK: " + cloth);
 
       setCloth(cloth);
 
-      // UI highlight
       items.forEach(i => i.classList.remove("active"));
       item.classList.add("active");
     });
   });
 
-  // Reset button（先保留）
   const resetBtn = document.getElementById("btn-reset");
   if (resetBtn) {
     resetBtn.addEventListener("click", () => {
-      console.log("Reset clicked");
+      debug("RESET CLICKED");
+      currentPose = null;
     });
   }
 
-  // Screenshot（Phase 1 先空）
   const shotBtn = document.getElementById("btn-screenshot");
   if (shotBtn) {
     shotBtn.addEventListener("click", () => {
-      console.log("Screenshot clicked (not implemented yet)");
+      debug("SCREENSHOT (not implemented)");
     });
   }
 }
 
-// 啟動
-main();
+/* ---------------- BOOTSTRAP（重點修正）---------------- */
+window.addEventListener("DOMContentLoaded", () => {
+  main();
+});
