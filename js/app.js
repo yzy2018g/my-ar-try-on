@@ -53,36 +53,30 @@ let pose;
 async function main() {
     log("APP START");
 
-    // -------------------------------
-    // 1. 初始化 camera
-    // -------------------------------
+    log("STEP 1 CAMERA");
+
     const camera = await initCamera();
+
+    log("STEP 2 CAMERA DONE");
+
     video = camera.video;
     canvas = camera.canvas;
 
-    log("CAMERA READY");
+    log("STEP 3 BEFORE RENDERER");
 
-    // -------------------------------
-    // 2. 初始化 renderer
-    // -------------------------------
     initRenderer(canvas, video);
     startRenderLoop();
 
     log("RENDERER STARTED");
 
-    // -------------------------------
-    // 3. 初始化 pose
-    // -------------------------------
+    log("STEP 4 BEFORE POSE");
+
     pose = await initPose(video, (landmarks) => {
-        // 每一幀 pose 更新
         updateClothFromPose(landmarks);
     });
 
     log("POSE READY");
 
-    // -------------------------------
-    // 4. 綁定 UI
-    // -------------------------------
     bindUI();
 }
 
