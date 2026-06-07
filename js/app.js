@@ -1,10 +1,12 @@
-document.body.innerHTML = "JS LOADED";
 import { initCamera } from "./camera.js";
 import { initPose } from "./pose.js";
 import { initRenderer, render, setCloth } from "./renderer.js";
 
 let currentPose = null;
 
+/* ==============================
+   DEBUG (UI safe)
+============================== */
 function debug(state) {
   const el = document.getElementById("debugPanel");
   if (!el) return;
@@ -21,7 +23,7 @@ RENDER: ${state.render || "?"}
 }
 
 /* ==============================
-   MAIN
+   MAIN PIPELINE
 ============================== */
 async function main() {
   debug({ camera: "INIT", video: "-", pose: "-", render: "-" });
@@ -35,16 +37,20 @@ async function main() {
 
   debug({ camera: "OK", video: "WAITING", pose: "-", render: "-" });
 
+  // 等 video ready
   await new Promise(resolve => {
+    if (video.readyState >= 2) return resolve();
     video.onloadeddata = () => resolve();
   });
 
   debug({ camera: "OK", video: "READY", pose: "-", render: "-" });
 
   initRenderer();
+  debug({ camera: "OK", video: "READY", pose: "INIT", render: "READY" });
 
   await initPose(video, (poseData) => {
     currentPose = poseData;
+
     debug({
       camera: "OK",
       video: "READY",
@@ -60,8 +66,13 @@ async function main() {
     render: "RUNNING"
   });
 
+  /* ==============================
+     RENDER LOOP
+  ============================== */
   function loop() {
-    if (currentPose) render(currentPose);
+    if (currentPose) {
+      render(currentPose);
+    }
 
     requestAnimationFrame(loop);
   }
@@ -76,7 +87,7 @@ function setupClothesUI() {
   const items = document.querySelectorAll(".cloth-item");
 
   if (!items.length) {
-    debug("NO CLOTH ITEMS FOUND");
+    debug({ camera: "-", video: "-", pose: "NO CLOTH UI", render: "-" });
     return;
   }
 
@@ -84,7 +95,12 @@ function setupClothesUI() {
     item.addEventListener("click", () => {
       const cloth = item.getAttribute("data-cloth");
 
-      debug("CLICK: " + cloth);
+      debug({
+        camera: "OK",
+        video: "READY",
+        pose: currentPose ? "LIVE" : "NULL",
+        render: "RUNNING"
+      });
 
       setCloth(cloth);
 
@@ -94,20 +110,38 @@ function setupClothesUI() {
   });
 
   document.getElementById("btn-reset")?.addEventListener("click", () => {
-    debug("RESET");
     currentPose = null;
+
+    debug({
+      camera: "OK",
+      video: "READY",
+      pose: "RESET",
+      render: "RUNNING"
+    });
   });
 
   document.getElementById("btn-screenshot")?.addEventListener("click", () => {
-    debug("SCREENSHOT");
+    debug({
+      camera: "OK",
+      video: "READY",
+      pose: currentPose ? "LIVE" : "NULL",
+      render: "RUNNING"
+    });
   });
 }
 
 /* ==============================
-   BOOTSTRAP（修正重點）
+   BOOTSTRAP (SAFE)
 ============================== */
 window.addEventListener("DOMContentLoaded", () => {
   const startBtn = document.getElementById("startBtn");
+
+  if (!startBtn) {
+    console.error("startBtn not found");
+    return;
+  }
+
+  setupClothesUI();
 
   startBtn.addEventListener("click", async () => {
     startBtn.style.display = "none";
