@@ -14,15 +14,16 @@ let clothScale = 1;
    INIT RENDERER
 ================================ */
 export function initRenderer(c, v) {
+   
+    canvas = c;
+    video = v;
+
+    if (!canvas || !video) return;
    canvas.style.position = "fixed";
 canvas.style.top = "0";
 canvas.style.left = "0";
 canvas.style.zIndex = "9999";
 canvas.style.background = "rgba(255,0,0,0.2)";
-    canvas = c;
-    video = v;
-
-    if (!canvas || !video) return;
 
     ctx = canvas.getContext("2d");
 
