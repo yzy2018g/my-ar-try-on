@@ -96,21 +96,16 @@ export function render(pose) {
      3. FIXED ROTATION (核心修正)
      👉 解決 90 度問題
   ========================= */
-  const rawAngle = Math.atan2(
+   const rawAngle = Math.atan2(
   rs.y - ls.y,
   rs.x - ls.x
 );
 
-// normalize to nearest upright direction
-let targetAngle = rawAngle - Math.PI / 2;
+// 固定 offset（只調一次，不動態 flip）
+const correctedAngle = rawAngle - Math.PI / 2;
 
-// snap correction (fix 90/180/135 drift)
-if (Math.abs(targetAngle) > Math.PI / 2) {
-  targetAngle -= Math.PI;
-}
-
-  // smoothing（避免抖動）
-  currentAngle = currentAngle * 0.8 + targetAngle * 0.2;
+// smooth only（關鍵）
+currentAngle = currentAngle * 0.85 + correctedAngle * 0.15;
 
   /* =========================
      4. clear canvas
