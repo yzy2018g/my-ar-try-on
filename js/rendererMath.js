@@ -1,3 +1,8 @@
+let currentAngle = 0;
+
+/* ==============================
+   角度差（避免 180° 跳動）
+============================== */
 export function angleDiff(a, b) {
   let d = a - b;
 
@@ -7,7 +12,11 @@ export function angleDiff(a, b) {
   return d;
 }
 
-export function safeShoulderAngle(ls, rs, MIRROR) {
+/* ==============================
+   安全肩膀角度
+   👉 防止 missing keypoints crash
+============================== */
+export function safeShoulderAngle(ls, rs, MIRROR, fallback = 0) {
   const hasL = ls && ls.visibility > 0.5;
   const hasR = rs && rs.visibility > 0.5;
 
@@ -20,5 +29,15 @@ export function safeShoulderAngle(ls, rs, MIRROR) {
     return Math.atan2(dy, dx);
   }
 
-  return 0;
+  return fallback;
+}
+
+/* ==============================
+   角度平滑（輸出穩定 angle）
+============================== */
+export function smoothAngle(target) {
+  const diff = angleDiff(target, currentAngle);
+  currentAngle += diff * 0.15;
+
+  return currentAngle;
 }
