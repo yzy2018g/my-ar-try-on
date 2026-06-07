@@ -191,23 +191,25 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 document.getElementById("testBtn").onclick = async () => {
-  const file = document.getElementById("fileInput").files[0];
+    const file =
+        document.getElementById("fileInput").files[0];
 
-  if (!file) {
-    console.log("請先選圖片");
-    return;
-  }
+    if (!file) {
+        log("NO FILE");
+        return;
+    }
 
-  const url = await testClothAPI(file);
+    const url = await testClothAPI(file);
 
-  const img = new Image();
-img.src = url;
+    // Step 2 👇
+    const img = new Image();
+    img.src = url;
 
-img.style.width = "200px";
-img.style.position = "absolute";
-img.style.top = "120px";
-img.style.left = "10px";
-img.style.zIndex = 9999;
+    img.style.width = "200px";
+    img.style.position = "absolute";
+    img.style.top = "120px";
+    img.style.left = "10px";
+    img.style.zIndex = 9999;
 
-document.body.appendChild(img);
+    document.body.appendChild(img);
 };
