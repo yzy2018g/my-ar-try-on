@@ -4,7 +4,7 @@ let video;
 let clothImg = new Image();
 let clothReady = false;
 
-// transform
+// transform state
 let clothX = 0;
 let clothY = 0;
 let clothAngle = 0;
@@ -26,7 +26,7 @@ export function initRenderer(c, v) {
         const h = video.videoHeight;
 
         if (!w || !h) {
-            console.warn("Video size not ready");
+            requestAnimationFrame(setup);
             return;
         }
 
@@ -35,14 +35,12 @@ export function initRenderer(c, v) {
 
         canvas.style.width = "100%";
         canvas.style.height = "100%";
-
         canvas.style.position = "absolute";
         canvas.style.top = "0";
         canvas.style.left = "0";
         canvas.style.zIndex = "2";
     };
 
-    // 🔥 這行是關鍵
     if (video.readyState >= 2) {
         setup();
     } else {
@@ -68,35 +66,38 @@ export function updateClothFromPose(landmarks) {
     const rs = landmarks[12];
     if (!ls || !rs) return;
 
-    // smoothing
-    clothX = clothX * 0.7 + ((ls.x + rs.x) / 2) * 0.3;
-    clothY = clothY * 0.7 + ((ls.y + rs.y) / 2) * 0.3;
+    // center point (normalized)
+    const cx = (ls.x + rs.x) / 2;
+    const cy = (ls.y + rs.y) / 2;
 
-    // angle
-    let rawAngle = Math.atan2(rs.y - ls.y, rs.x - ls.x);
-    if (Math.abs(rawAngle) > Math.PI / 2) rawAngle += Math.PI;
-    clothAngle = rawAngle;
+    // smoothing position
+    clothX = clothX * 0.7 + cx * 0.3;
+    clothY = clothY * 0.7 + cy * 0.3;
 
-    // scale
+    // angle (NO hack, keep stable first)
+    clothAngle = Math.atan2(rs.y - ls.y, rs.x - ls.x);
+
+    // scale based on shoulder distance
     const dx = rs.x - ls.x;
     const dy = rs.y - ls.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    clothScale = dist * 2.5;
+    clothScale = dist * 3.0;
 }
 
 /* ===============================
    RENDER
 ================================ */
 export function render() {
-   ctx.fillStyle = "blue";
-ctx.fillRect(0, 0, 200, 200);
-    if (!ctx || !video) return;
+    if (!ctx || !canvas || !video) return;
 
     const w = canvas.width;
     const h = canvas.height;
 
-    // background
+    // clear frame (IMPORTANT)
+    ctx.clearRect(0, 0, w, h);
+
+    // draw video background
     ctx.drawImage(video, 0, 0, w, h);
 
     const x = clothX * w;
@@ -104,17 +105,17 @@ ctx.fillRect(0, 0, 200, 200);
 
     /* ================= DEBUG POINTS ================= */
 
-    // red center
+    // center marker
     ctx.fillStyle = "red";
     ctx.beginPath();
     ctx.arc(w / 2, h / 2, 6, 0, Math.PI * 2);
     ctx.fill();
 
-    // yellow pose point
+    // pose point
     ctx.fillStyle = "yellow";
     ctx.fillRect(x - 5, y - 5, 10, 10);
 
-    /* ================= CLOTH CHECK ================= */
+    /* ================= CLOTH RENDER ================= */
 
     if (!clothReady || !clothImg || clothImg.naturalWidth === 0) {
         drawDebug();
@@ -132,7 +133,7 @@ ctx.fillRect(0, 0, 200, 200);
     ctx.translate(x, y);
     ctx.rotate(clothAngle);
 
-    // green bounding box
+    // bounding box debug
     ctx.strokeStyle = "lime";
     ctx.lineWidth = 2;
     ctx.strokeRect(-cw / 2, -ch / 2, cw, ch);
@@ -156,7 +157,7 @@ export function startRenderLoop() {
 }
 
 /* ===============================
-   DEBUG UI (on canvas)
+   DEBUG PANEL
 ================================ */
 function drawDebug() {
     if (!ctx || !canvas) return;
