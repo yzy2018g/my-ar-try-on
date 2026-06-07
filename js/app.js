@@ -4,19 +4,49 @@ import { initRenderer } from "./renderer.js";
 
 /* ---------------- DEBUG API TEST ---------------- */
 async function testClothAPI(file) {
+  log("API: START");
+
+  if (!file) {
+    log("API: NO FILE");
+    return;
+  }
+
+  log(`API: FILE OK (${file.name})`);
+
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch("https://michaelyo-my-ar-cloth-api.hf.space/process_cloth", {
-    method: "POST",
-    body: formData
-  });
+  log("API: SENDING REQUEST...");
 
-  const data = await res.json();
+  try {
+    const res = await fetch(
+      "https://michaelyo-my-ar-cloth-api.hf.space/process_cloth",
+      {
+        method: "POST",
+        body: formData
+      }
+    );
 
-  console.log("[API RESULT]", data);
+    log(`API: RESPONSE RECEIVED (status ${res.status})`);
 
-  return data.url;
+    const data = await res.json();
+
+    log("API: JSON PARSED");
+
+    if (!data.url) {
+      log("API: ERROR - no url in response");
+      return null;
+    }
+
+    log(`API: SUCCESS URL = ${data.url}`);
+
+    return data.url;
+
+  } catch (err) {
+    log("API: FETCH ERROR");
+    log(err.message || err);
+    return null;
+  }
 }
 
 let currentPose = null;
@@ -24,6 +54,18 @@ let currentPose = null;
 /* ==============================
    DEBUG (UI safe)
 ============================== */
+let debugLogs = [];
+function log(msg) {
+  const time = new Date().toLocaleTimeString();
+  debugLogs.push(`[${time}] ${msg}`);
+
+  // 最多保留 8 行（避免爆掉）
+  if (debugLogs.length > 8) {
+    debugLogs.shift();
+  }
+
+  renderDebug();
+}
 function debug(state) {
   const el = document.getElementById("debugPanel");
   if (!el) return;
@@ -36,7 +78,19 @@ CAMERA: ${state.camera || "?"}
 VIDEO: ${state.video || "?"}
 POSE: ${state.pose || "?"}
 RENDER: ${state.render || "?"}
+
+--- LOG ---
+${debugLogs.join("\n")}
 `;
+}
+function renderDebug() {
+  // 你原本 debug 需要 state
+  debug({
+    camera: window.cameraState,
+    video: window.videoState,
+    pose: window.poseState,
+    render: window.renderState
+  });
 }
 
 /* ==============================
