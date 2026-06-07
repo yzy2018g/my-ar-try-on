@@ -7,24 +7,29 @@ let clothReady = false;
 
 const MIRROR = true;
 
-/* init */
+/* ==============================
+   init
+============================== */
 export function initRenderer() {
   canvas = document.getElementById("canvas");
   ctx = canvas.getContext("2d");
   video = document.getElementById("video");
 }
 
-/* render */
+/* ==============================
+   render loop
+============================== */
 export function render(pose) {
   if (!pose || !clothReady) return;
 
-  const w = canvas.width;
-  const h = canvas.height;
+  const w = canvas.width || 640;
+  const h = canvas.height || 480;
 
+  // reset
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
-  // 背景
+  // background
   drawVideo(ctx, video, w, h);
 
   ctx.save();
@@ -34,7 +39,7 @@ export function render(pose) {
     ctx.translate(-w, 0);
   }
 
-  // 衣服
+  // cloth
   drawCloth(ctx, pose, clothImg, { MIRROR });
 
   ctx.restore();
