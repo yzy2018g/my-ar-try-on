@@ -1,6 +1,23 @@
 import { initCamera } from "./camera.js";
 import { initPose } from "./pose.js";
-import { initRenderer, render, setCloth } from "./renderer.js";
+import { initRenderer } from "./renderer.js";
+
+/* ---------------- DEBUG API TEST ---------------- */
+async function testClothAPI(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch("https://michaelyo-my-ar-cloth-api.hf.space/process_cloth", {
+    method: "POST",
+    body: formData
+  });
+
+  const data = await res.json();
+
+  console.log("[API RESULT]", data);
+
+  return data.url;
+}
 
 let currentPose = null;
 
