@@ -1,53 +1,25 @@
+import { removeBackground } from "./api.js";
 import { initCamera } from "./camera.js";
 import { initPose } from "./pose.js";
 import { initRenderer } from "./renderer.js";
 
 /* ---------------- DEBUG API TEST ---------------- */
 async function testClothAPI(file) {
-  log("API: START");
-
-  if (!file) {
-    log("API: NO FILE");
-    return;
-  }
-
-  log(`API: FILE OK (${file.name})`);
-
   const formData = new FormData();
   formData.append("file", file);
 
-  log("API: SENDING REQUEST...");
-
-  try {
-    const res = await fetch(
-      "https://michaelyo-my-ar-cloth-api.hf.space/process_cloth",
-      {
-        method: "POST",
-        body: formData
-      }
-    );
-
-    log(`API: RESPONSE RECEIVED (status ${res.status})`);
-
-    const data = await res.json();
-
-    log("API: JSON PARSED");
-
-    if (!data.url) {
-      log("API: ERROR - no url in response");
-      return null;
+  const res = await fetch(
+    "https://michaelyo-my-ar-cloth-api.hf.space/process_cloth",
+    {
+      method: "POST",
+      body: formData
     }
+  );
 
-    log(`API: SUCCESS URL = ${data.url}`);
-
-    return data.url;
-
-  } catch (err) {
-    log("API: FETCH ERROR");
-    log(err.message || err);
-    return null;
-  }
+  const data = await res.json();
+  return data.url;
 }
+
 
 let currentPose = null;
 
