@@ -89,18 +89,18 @@ body {
    DEBUG PANEL
 ============================== */
 #debugPanel {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 99999;
-  background: rgba(0, 0, 0, 0.7);
-  color: #00ffcc;
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 9999;
+  background: rgba(0,0,0,0.7);
+  color: #00ff88;
+  font-family: monospace;
   font-size: 12px;
-  padding: 8px;
-  max-width: 100%;
-  white-space: pre-line;
+  padding: 10px;
+  border-radius: 6px;
+  white-space: pre;
 }
-
 /* ==============================
    CLOTH PANEL
 ============================== */
