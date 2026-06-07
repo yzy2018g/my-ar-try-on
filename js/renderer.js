@@ -102,7 +102,7 @@ export function render(pose) {
   );
 
   // 🔥 修正衣服貼圖朝向
-  const targetAngle = rawAngle - Math.PI / 2;
+  const targetAngle = rawAngle - Math.PI;
 
   // smoothing（避免抖動）
   currentAngle = currentAngle * 0.8 + targetAngle * 0.2;
