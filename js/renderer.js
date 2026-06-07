@@ -4,7 +4,7 @@ let video;
 let clothImg = new Image();
 let clothReady = false;
 
-// cloth transform
+// transform
 let clothX = 0;
 let clothY = 0;
 let clothAngle = 0;
@@ -14,24 +14,31 @@ let clothScale = 1;
    INIT RENDERER
 ================================ */
 export function initRenderer(c, v) {
-   
     canvas = c;
     video = v;
 
     if (!canvas || !video) return;
-   canvas.style.position = "fixed";
-canvas.style.top = "0";
-canvas.style.left = "0";
-canvas.style.zIndex = "9999";
-canvas.style.background = "rgba(255,0,0,0.2)";
 
     ctx = canvas.getContext("2d");
 
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    // 🔥 等 video metadata 正確再設定尺寸
+    const setup = () => {
+        const w = video.videoWidth || 640;
+        const h = video.videoHeight || 480;
 
-    ctx.fillStyle = "red";
-    ctx.fillRect(0, 0, 100, 100);
+        canvas.width = w;
+        canvas.height = h;
+
+        // CSS sync（避免 mismatch）
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
+    };
+
+    if (video.readyState >= 2) {
+        setup();
+    } else {
+        video.onloadedmetadata = setup;
+    }
 }
 
 /* ===============================
@@ -52,16 +59,16 @@ export function updateClothFromPose(landmarks) {
     const rs = landmarks[12];
     if (!ls || !rs) return;
 
-    // smoothing（避免抖動）
+    // smoothing
     clothX = clothX * 0.7 + ((ls.x + rs.x) / 2) * 0.3;
     clothY = clothY * 0.7 + ((ls.y + rs.y) / 2) * 0.3;
 
-    // angle（簡單穩定）
+    // angle
     let rawAngle = Math.atan2(rs.y - ls.y, rs.x - ls.x);
     if (Math.abs(rawAngle) > Math.PI / 2) rawAngle += Math.PI;
     clothAngle = rawAngle;
 
-    // scale（修正成畫面比例）
+    // scale
     const dx = rs.x - ls.x;
     const dy = rs.y - ls.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -70,7 +77,7 @@ export function updateClothFromPose(landmarks) {
 }
 
 /* ===============================
-   RENDER LOOP
+   RENDER
 ================================ */
 export function render() {
     if (!ctx || !video) return;
@@ -84,20 +91,22 @@ export function render() {
     const x = clothX * w;
     const y = clothY * h;
 
-    // 🔥 DEBUG 點（一定要在 x/y 後面）
-    ctx.fillStyle = "yellow";
-    ctx.fillRect(x - 5, y - 5, 10, 10);
+    /* ================= DEBUG POINTS ================= */
 
-    drawDebugOverlay();
-
-    // center test point
+    // red center
     ctx.fillStyle = "red";
     ctx.beginPath();
     ctx.arc(w / 2, h / 2, 6, 0, Math.PI * 2);
     ctx.fill();
 
-    // cloth check
+    // yellow pose point
+    ctx.fillStyle = "yellow";
+    ctx.fillRect(x - 5, y - 5, 10, 10);
+
+    /* ================= CLOTH CHECK ================= */
+
     if (!clothReady || !clothImg || clothImg.naturalWidth === 0) {
+        drawDebug();
         return;
     }
 
@@ -112,6 +121,7 @@ export function render() {
     ctx.translate(x, y);
     ctx.rotate(clothAngle);
 
+    // green bounding box
     ctx.strokeStyle = "lime";
     ctx.lineWidth = 2;
     ctx.strokeRect(-cw / 2, -ch / 2, cw, ch);
@@ -119,6 +129,8 @@ export function render() {
     ctx.drawImage(clothImg, -cw / 2, -ch / 2, cw, ch);
 
     ctx.restore();
+
+    drawDebug();
 }
 
 /* ===============================
@@ -133,17 +145,15 @@ export function startRenderLoop() {
 }
 
 /* ===============================
-   DEBUG OVERLAY（畫面內 debug）
+   DEBUG UI (on canvas)
 ================================ */
-function drawDebugOverlay() {
+function drawDebug() {
     if (!ctx || !canvas) return;
-
-    const w = canvas.width;
 
     ctx.save();
 
     ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.fillRect(0, 0, 280, 170);
+    ctx.fillRect(0, 0, 260, 160);
 
     ctx.fillStyle = "white";
     ctx.font = "14px monospace";
@@ -161,12 +171,6 @@ function drawDebugOverlay() {
         ctx.fillText(l, 10, y);
         y += 20;
     }
-
-    // shoulder point
-    ctx.fillStyle = "cyan";
-    ctx.beginPath();
-    ctx.arc(clothX * w, clothY * canvas.height, 5, 0, Math.PI * 2);
-    ctx.fill();
 
     ctx.restore();
 }
