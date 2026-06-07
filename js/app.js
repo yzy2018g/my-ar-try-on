@@ -7,29 +7,16 @@ import { initRenderer } from "./renderer.js";
 async function testClothAPI(file) {
     log("API: START");
 
-    if (!file) {
-        log("API: NO FILE");
-        return null;
-    }
+    const result = await removeBackground(file);
 
-    try {
-        log(`API: FILE OK (${file.name})`);
+    log("API: SUCCESS");
 
-        const result = await removeBackground(file);
+    const url = result.data[0].url;
 
-        log("API: SUCCESS");
+    log("IMAGE URL:");
+    log(url);
 
-        // 印出完整回傳內容
-        log("RESULT:");
-        log(JSON.stringify(result));
-
-        return result;
-
-    } catch (err) {
-        log("API: ERROR");
-        log(err.message || String(err));
-        return null;
-    }
+    return url;
 }
 
 let currentPose = null;
@@ -213,9 +200,14 @@ document.getElementById("testBtn").onclick = async () => {
 
   const url = await testClothAPI(file);
 
-  console.log("去背結果:", url);
-
   const img = new Image();
-  img.src = url;
-  document.body.appendChild(img);
+img.src = url;
+
+img.style.width = "200px";
+img.style.position = "absolute";
+img.style.top = "120px";
+img.style.left = "10px";
+img.style.zIndex = 9999;
+
+document.body.appendChild(img);
 };
