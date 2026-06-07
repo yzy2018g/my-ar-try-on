@@ -107,6 +107,8 @@ export function render() {
     );
 
     ctx.restore();
+
+   arDebug();
 }
 
 /* ===============================
@@ -125,4 +127,20 @@ export function startRenderLoop() {
 
     console.log("🎬 Render loop started");
     loop();
+}
+
+function arDebug() {
+    const el = document.getElementById("debugPanel");
+    if (!el) return;
+
+    el.innerText =
+`[AR DEBUG]
+
+CLOTH READY: ${clothReady}
+IMG LOADED: ${clothImg?.complete}
+X: ${clothX.toFixed(3)}
+Y: ${clothY.toFixed(3)}
+SCALE: ${clothScale.toFixed(3)}
+ANGLE: ${(clothAngle * 180 / Math.PI).toFixed(1)}°
+`;
 }
