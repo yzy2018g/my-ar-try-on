@@ -4,14 +4,15 @@ import { initRenderer, render, setCloth } from "./renderer.js";
 
 let currentPose = null;
 
-/* ---------------- DEBUG ---------------- */
 function debug(msg) {
   const el = document.getElementById("debugPanel");
   if (el) el.innerText = msg;
   console.log(msg);
 }
 
-/* ---------------- MAIN ---------------- */
+/* ==============================
+   MAIN
+============================== */
 async function main() {
   debug("APP START");
 
@@ -21,7 +22,14 @@ async function main() {
     debug("CAMERA FAIL");
     return;
   }
+
   debug("CAMERA OK");
+
+  // 🔥 等 video ready（很重要）
+  await new Promise(resolve => {
+    if (video.videoWidth > 0) return resolve();
+    video.onloadedmetadata = () => resolve();
+  });
 
   // 2. Renderer
   initRenderer();
@@ -31,6 +39,7 @@ async function main() {
   await initPose(video, (poseData) => {
     currentPose = poseData;
   });
+
   debug("POSE OK");
 
   // 4. UI
@@ -39,27 +48,25 @@ async function main() {
 
   // 5. Render loop
   function loop() {
-    if (currentPose) {
-      render(currentPose);
-    }
+    if (currentPose) render(currentPose);
     requestAnimationFrame(loop);
   }
 
   loop();
 }
 
-/* ---------------- UI ---------------- */
+/* ==============================
+   UI
+============================== */
 function setupClothesUI() {
   const items = document.querySelectorAll(".cloth-item");
 
-  debug("cloth items: " + items.length);
-
-  if (!items || items.length === 0) {
+  if (!items.length) {
     debug("NO CLOTH ITEMS FOUND");
     return;
   }
 
-  items.forEach((item) => {
+  items.forEach(item => {
     item.addEventListener("click", () => {
       const cloth = item.getAttribute("data-cloth");
 
@@ -72,23 +79,24 @@ function setupClothesUI() {
     });
   });
 
-  const resetBtn = document.getElementById("btn-reset");
-  if (resetBtn) {
-    resetBtn.addEventListener("click", () => {
-      debug("RESET CLICKED");
-      currentPose = null;
-    });
-  }
+  document.getElementById("btn-reset")?.addEventListener("click", () => {
+    debug("RESET");
+    currentPose = null;
+  });
 
-  const shotBtn = document.getElementById("btn-screenshot");
-  if (shotBtn) {
-    shotBtn.addEventListener("click", () => {
-      debug("SCREENSHOT (not implemented)");
-    });
-  }
+  document.getElementById("btn-screenshot")?.addEventListener("click", () => {
+    debug("SCREENSHOT");
+  });
 }
 
-/* ---------------- BOOTSTRAP（重點修正）---------------- */
+/* ==============================
+   BOOTSTRAP（修正重點）
+============================== */
 window.addEventListener("DOMContentLoaded", () => {
-  main();
+  const startBtn = document.getElementById("startBtn");
+
+  startBtn.addEventListener("click", async () => {
+    startBtn.style.display = "none";
+    await main();
+  });
 });
