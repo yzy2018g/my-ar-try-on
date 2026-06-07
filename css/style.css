@@ -1,9 +1,15 @@
+/* ==============================
+   RESET
+============================== */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+/* ==============================
+   BASE
+============================== */
 body {
   font-family: Arial, sans-serif;
   background: #000;
@@ -11,14 +17,18 @@ body {
   overflow: hidden;
 }
 
-/* 整體容器 */
+/* ==============================
+   APP CONTAINER
+============================== */
 #app {
   width: 100vw;
   height: 100vh;
   position: relative;
 }
 
-/* Header */
+/* ==============================
+   HEADER
+============================== */
 .header {
   position: absolute;
   top: 10px;
@@ -30,7 +40,10 @@ body {
   color: #00ffcc;
 }
 
-/* Camera 區域 */
+/* ==============================
+   CAMERA LAYER
+   （video 在底）
+============================== */
 .camera-container {
   position: absolute;
   width: 100%;
@@ -38,25 +51,43 @@ body {
   overflow: hidden;
 }
 
-/* video 畫面 */
+/* ==============================
+   VIDEO (background layer)
+============================== */
 #video {
   position: absolute;
   width: 100%;
   height: 100%;
+  top: 0;
+  left: 0;
   object-fit: cover;
-  transform: scaleX(-1); /* 鏡像效果（自拍感） */
+
+  /* 自拍鏡像 */
+  transform: scaleX(-1);
+
+  /* 🔥 必須：底層 */
+  z-index: 1;
 }
 
-/* AR canvas */
+/* ==============================
+   CANVAS (AR overlay)
+============================== */
 #canvas {
   position: absolute;
   width: 100%;
   height: 100%;
-  left: 0;
   top: 0;
+  left: 0;
+
   pointer-events: none;
+
+  /* 🔥 關鍵：一定要在 video 上面 */
+  z-index: 2;
 }
 
+/* ==============================
+   DEBUG PANEL
+============================== */
 #debugPanel {
   position: fixed;
   top: 0;
@@ -70,7 +101,9 @@ body {
   white-space: pre-line;
 }
 
-/* 衣服選單 */
+/* ==============================
+   CLOTH PANEL
+============================== */
 .clothes-panel {
   position: absolute;
   bottom: 80px;
@@ -82,7 +115,7 @@ body {
   padding: 10px;
 }
 
-/* 單一衣服卡片 */
+/* cloth card */
 .cloth-item {
   width: 70px;
   height: 90px;
@@ -109,19 +142,19 @@ body {
   color: #ccc;
 }
 
-/* hover */
 .cloth-item:hover {
   transform: translateY(-4px);
   border-color: #00ffcc;
 }
 
-/* 選中狀態 */
 .cloth-item.active {
   border-color: #00ffcc;
   box-shadow: 0 0 10px #00ffcc;
 }
 
-/* 控制按鈕 */
+/* ==============================
+   CONTROLS
+============================== */
 .controls {
   position: absolute;
   bottom: 10px;
