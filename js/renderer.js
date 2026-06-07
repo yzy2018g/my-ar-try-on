@@ -33,6 +33,14 @@ export function initRenderer() {
 
   // 畫面 resize 時同步 canvas
   window.addEventListener("resize", resizeCanvas);
+
+  canvas.width = 400;
+canvas.height = 400;
+
+ctx.fillStyle = "red";
+ctx.fillRect(0, 0, 200, 200);
+
+alert("DRAW TEST");
 }
 
 
