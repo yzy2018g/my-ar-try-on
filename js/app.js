@@ -1,3 +1,4 @@
+document.body.innerHTML = "JS LOADED";
 import { initCamera } from "./camera.js";
 import { initPose } from "./pose.js";
 import { initRenderer, render, setCloth } from "./renderer.js";
