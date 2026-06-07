@@ -101,6 +101,15 @@ body {
   border-radius: 6px;
   white-space: pre;
 }
+
+#ui {
+  position: absolute;
+  z-index: 9999;
+  top: 10px;
+  left: 10px;
+  background: rgba(0,0,0,0.5);
+  padding: 10px;
+}
 /* ==============================
    CLOTH PANEL
 ============================== */
