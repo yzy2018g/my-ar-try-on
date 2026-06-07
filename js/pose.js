@@ -2,17 +2,18 @@ let pose;
 let video;
 let onPoseCallback = null;
 
-// 初始化 Pose
 export async function initPose(videoElement, callback) {
   video = videoElement;
   onPoseCallback = callback;
 
-  const { Pose, POSE_LANDMARKS, POSE_CONNECTIONS } = window;
+  if (!window.Pose) {
+    console.error("MediaPipe Pose not loaded");
+    return;
+  }
 
-  pose = new Pose({
-    locateFile: (file) => {
-      return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-    }
+  pose = new window.Pose({
+    locateFile: (file) =>
+      `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
   });
 
   pose.setOptions({
@@ -28,19 +29,22 @@ export async function initPose(videoElement, callback) {
   startCameraPipe();
 }
 
-// 送 video frame 給 MediaPipe
 function startCameraPipe() {
   async function detect() {
-    if (video.readyState >= 2) {
-      await pose.send({ image: video });
+    try {
+      if (video && video.readyState >= 2 && pose) {
+        await pose.send({ image: video });
+      }
+    } catch (e) {
+      console.error("pose send error:", e);
     }
+
     requestAnimationFrame(detect);
   }
 
   detect();
 }
 
-// Pose 結果處理
 function onResults(results) {
   if (!results.poseLandmarks) return;
 
@@ -58,16 +62,12 @@ function onResults(results) {
   }
 }
 
-// landmark → pixel
 function toXY(landmark) {
-  if (!landmark) return null;
-
-  const videoWidth = video.videoWidth;
-  const videoHeight = video.videoHeight;
+  if (!landmark || !video) return null;
 
   return {
-    x: landmark.x * videoWidth,
-    y: landmark.y * videoHeight,
+    x: landmark.x * video.videoWidth,
+    y: landmark.y * video.videoHeight,
     z: landmark.z
   };
 }
