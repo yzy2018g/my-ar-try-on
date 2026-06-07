@@ -1,155 +1,152 @@
-/**
- * ==============================
- * AR Renderer（安全穩定版）
- * ==============================
- * ❗ 重點設計：
- * 1. 不在 import 階段碰 DOM（避免 ES module crash）
- * 2. 所有 canvas/video 都在 initRenderer() 才取得
- * 3. render() 永遠防 null（避免 runtime crash）
- * 4. 適合 GitHub Pages / 手機環境
- */
+// ===============================
+// AR Renderer（衣服貼人體核心模組）
+// 功能：
+// 1. 顯示攝影機畫面
+// 2. 根據 pose 把衣服貼到人體
+// 3. 控制位置 / 旋轉 / 大小
+// ===============================
 
-/* =========================
-   全域變數（延遲初始化）
-========================= */
-let canvas;          // 畫布 DOM（延遲取得）
-let ctx;             // canvas 2D context
-let clothImg = new Image(); // 當前衣服圖片
-let currentCloth = "style_1.png";
+let canvas, ctx;   // 畫布與繪圖環境
+let video;         // camera 畫面
+
+// 衣服圖片
+let clothImg = new Image();
 let clothReady = false;
 
-const MIRROR = true; // 是否鏡像（自拍模式）
+// ===============================
+// 衣服的變換參數（核心）
+// ===============================
 
-/* =========================
-   初始化 Renderer（⚠️ 必須在 app.js 呼叫）
-========================= */
-export function initRenderer() {
-  // ⚠️ 這裡才碰 DOM（避免 import 時 crash）
-  canvas = document.getElementById("canvas");
+// 衣服中心位置（0~1 正規化座標）
+let clothX = 0;
+let clothY = 0;
 
-  // 安全檢查（避免 null 直接炸）
-  if (!canvas) {
-    console.error("[Renderer] canvas not found");
-    return;
-  }
+// 衣服旋轉角度（弧度）
+let clothAngle = 0;
 
-  ctx = canvas.getContext("2d");
+// 衣服縮放比例
+let clothScale = 1;
 
-  // 載入初始衣服
-  loadCloth(currentCloth);
-
-  // 初始化 canvas 尺寸
-  resizeCanvas();
-
-  // 當螢幕改變時重新調整（手機旋轉）
-  window.addEventListener("resize", resizeCanvas);
+/* ===============================
+   初始化 Renderer
+   - 接收 canvas + video
+   - 建立 2D 畫布 context
+================================ */
+export function initRenderer(c, v) {
+    canvas = c;
+    ctx = canvas.getContext("2d");
+    video = v;
 }
 
-/* =========================
-   載入衣服圖片
-========================= */
-function loadCloth(src) {
-  clothReady = false;
-
-  clothImg = new Image();
-
-  clothImg.onload = () => {
-    console.log("[Renderer] CLOTH LOADED:", src);
+/* ===============================
+   設定衣服圖片
+   - API 回來的去背 PNG 會丟進來
+   - 用來當作 AR overlay
+================================ */
+export function setCloth(img) {
+    clothImg = img;
     clothReady = true;
-  };
-
-  clothImg.onerror = () => {
-    console.error("[Renderer] CLOTH FAILED:", src);
-    clothReady = false;
-  };
-
-  // 注意 assets 路徑必須正確（GitHub Pages 很常錯）
-  clothImg.src = `assets/clothes/${src}`;
 }
 
-/* =========================
-   Canvas 尺寸同步 video
-========================= */
-function resizeCanvas() {
-  const video = document.getElementById("video");
+/* ===============================
+   更新 Pose → 計算衣服位置
+   landmarks 來源：MediaPipe Pose
+   11 = 左肩
+   12 = 右肩
+================================ */
+export function updateClothFromPose(landmarks) {
+    if (!landmarks) return;
 
-  // ⚠️ video 或 canvas 還沒 ready 就直接 return
-  if (!video || !canvas) return;
+    const ls = landmarks[11]; // 左肩
+    const rs = landmarks[12]; // 右肩
 
-  const w = video.videoWidth || 640;
-  const h = video.videoHeight || 480;
+    // 如果偵測不到肩膀就不更新
+    if (!ls || !rs) return;
 
-  canvas.width = w;
-  canvas.height = h;
+    // -------------------------------
+    // 1. 計算衣服中心點（肩膀中間）
+    // -------------------------------
+    clothX = (ls.x + rs.x) / 2;
+    clothY = (ls.y + rs.y) / 2;
+
+    // -------------------------------
+    // 2. 計算衣服旋轉角度
+    //    用肩膀連線方向當作身體方向
+    // -------------------------------
+    clothAngle = Math.atan2(
+        rs.y - ls.y,
+        rs.x - ls.x
+    );
+
+    // -------------------------------
+    // 3. 計算衣服大小（肩寬）
+    // -------------------------------
+    const dx = rs.x - ls.x;
+    const dy = rs.y - ls.y;
+
+    const shoulderDist = Math.sqrt(dx * dx + dy * dy);
+
+    // 2.2 是經驗值（可微調）
+    clothScale = shoulderDist * 2.2;
 }
 
-/* =========================
-   UI：切換衣服
-========================= */
-export function setCloth(src) {
-  currentCloth = src;
-  loadCloth(src);
+/* ===============================
+   真正的渲染流程（每一幀執行）
+================================ */
+export function render() {
+    if (!ctx || !video) return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+
+    // -------------------------------
+    // 1. 畫背景（攝影機畫面）
+    // -------------------------------
+    ctx.drawImage(video, 0, 0, w, h);
+
+    // 如果還沒載入衣服就停止
+    if (!clothReady || !clothImg.complete) return;
+
+    // -------------------------------
+    // 2. 把 normalized 座標轉成像素
+    // -------------------------------
+    const x = clothX * w;
+    const y = clothY * h;
+
+    // 衣服大小
+    const cw = clothImg.width * clothScale;
+    const ch = clothImg.height * clothScale;
+
+    // -------------------------------
+    // 3. 開始畫衣服（重點）
+    // -------------------------------
+    ctx.save(); // 保存畫布狀態
+
+    // 移動畫布到人體中心點
+    ctx.translate(x, y);
+
+    // 讓衣服跟著人體旋轉
+    ctx.rotate(clothAngle);
+
+    // 畫去背衣服
+    ctx.drawImage(
+        clothImg,
+        -cw / 2,  // 左上角修正（讓中心對齊）
+        -ch / 2,
+        cw,
+        ch
+    );
+
+    ctx.restore(); // 還原畫布狀態
 }
 
-/* =========================
-   主渲染函式（每 frame 呼叫）
-========================= */
-export function render(pose) {
-  // ⚠️ 防 crash：任何一個沒準備好都直接跳過
-  if (!canvas || !ctx) return;
-  if (!pose) return;
-
-  const left = pose.leftShoulder;
-  const right = pose.rightShoulder;
-
-  // ⚠️ 沒肩膀資料就不畫
-  if (!left || !right) return;
-
-  /* =========================
-     1. 清畫布（每 frame 必做）
-  ========================= */
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  /* =========================
-     2. debug：畫肩膀點（方便你看 pose 是否正常）
-  ========================= */
-  ctx.fillStyle = "red";
-  ctx.fillRect(left.x - 5, left.y - 5, 10, 10);
-
-  ctx.fillStyle = "blue";
-  ctx.fillRect(right.x - 5, right.y - 5, 10, 10);
-
-  /* =========================
-     3. 衣服還沒載好 → 只畫 debug 點
-  ========================= */
-  if (!clothReady) return;
-
-  /* =========================
-     4. 計算衣服位置（肩膀中心）
-  ========================= */
-  const centerX = (left.x + right.x) / 2;
-  const centerY = (left.y + right.y) / 2;
-
-  /* =========================
-     5. 計算肩寬 → 當作衣服 scale 基準
-  ========================= */
-  const shoulderWidth = Math.hypot(
-    right.x - left.x,
-    right.y - left.y
-  );
-
-  const clothWidth = shoulderWidth * 2.0;
-  const clothHeight = clothWidth * 1.3;
-
-  /* =========================
-     6. 畫衣服（先不做旋轉，避免 bug）
-  ========================= */
-  ctx.drawImage(
-    clothImg,
-    centerX - clothWidth / 2,
-    centerY,
-    clothWidth,
-    clothHeight
-  );
+/* ===============================
+   啟動 render loop（動畫循環）
+================================ */
+export function startRenderLoop() {
+    function loop() {
+        render();
+        requestAnimationFrame(loop);
+    }
+    loop();
 }
