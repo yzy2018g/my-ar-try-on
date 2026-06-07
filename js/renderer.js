@@ -10,14 +10,14 @@ let clothReady = false;
 let currentAngle = 0;
 let modeSmooth = 0;
 
-/* =========================
-   自拍鏡頭設定（很重要）
-========================= */
+// ==============================
+// 自拍鏡頭
+// ==============================
 const MIRROR = true;
 
-/* =========================
-   init
-========================= */
+/* ==============================
+   初始化
+============================== */
 export function initRenderer() {
   canvas = document.getElementById("canvas");
   ctx = canvas.getContext("2d");
@@ -28,24 +28,23 @@ export function initRenderer() {
   window.addEventListener("resize", resizeCanvas);
 }
 
-/* =========================
-   load cloth
-========================= */
+/* ==============================
+   載入衣服
+============================== */
 function loadCloth(src) {
   clothReady = false;
 
   clothImg = new Image();
+  clothImg.src = `assets/clothes/${src}`;
 
   clothImg.onload = () => {
     clothReady = true;
   };
-
-  clothImg.src = `assets/clothes/${src}`;
 }
 
-/* =========================
+/* ==============================
    resize
-========================= */
+============================== */
 function resizeCanvas() {
   const video = document.getElementById("video");
   if (!video) return;
@@ -54,17 +53,9 @@ function resizeCanvas() {
   canvas.height = video.videoHeight || 480;
 }
 
-/* =========================
-   change cloth
-========================= */
-export function setCloth(src) {
-  currentCloth = src;
-  loadCloth(src);
-}
-
-/* =========================
-   angle diff
-========================= */
+/* ==============================
+   angle smoothing
+============================== */
 function angleDiff(a, b) {
   let d = a - b;
   while (d > Math.PI) d -= 2 * Math.PI;
@@ -72,21 +63,52 @@ function angleDiff(a, b) {
   return d;
 }
 
-/* =========================
-   visibility check
-========================= */
-function hasValidLowerBody(lh, rh) {
-  return (
-    lh &&
-    rh &&
-    lh.visibility > 0.5 &&
-    rh.visibility > 0.5
-  );
+/* ==============================
+   shoulder safe angle
+   ------------------------------
+   ✔ 有雙肩 → 正常
+   ✔ 缺一肩 → 用 fallback
+   ✔ 全缺 → return 0
+============================== */
+function safeShoulderAngle(ls, rs) {
+  const hasL = ls && ls.visibility > 0.5;
+  const hasR = rs && rs.visibility > 0.5;
+
+  // =========================
+  // ① 雙肩正常
+  // =========================
+  if (hasL && hasR) {
+    let dx = rs.x - ls.x;
+    let dy = rs.y - ls.y;
+
+    if (MIRROR) dx = ls.x - rs.x;
+
+    return Math.atan2(dy, dx);
+  }
+
+  // =========================
+  // ② 只剩左肩（用 body 方向猜）
+  // =========================
+  if (hasL && !hasR) {
+    return 0; // fallback：水平
+  }
+
+  // =========================
+  // ③ 只剩右肩（同理）
+  // =========================
+  if (!hasL && hasR) {
+    return 0;
+  }
+
+  // =========================
+  // ④ 完全沒有
+  // =========================
+  return currentAngle;
 }
 
-/* =========================
+/* ==============================
    render
-========================= */
+============================== */
 export function render(pose) {
   if (!pose || !clothReady) return;
 
@@ -95,30 +117,23 @@ export function render(pose) {
   const lh = pose.leftHip;
   const rh = pose.rightHip;
 
-  if (!ls || !rs) return;
+  if (!ls && !rs) return;
 
-  /* =========================
-     mirror-safe direction
-  ========================= */
-  let dx = rs.x - ls.x;
-  let dy = rs.y - ls.y;
-
-  // 🔥 自拍鏡頭修正（核心）
-  if (MIRROR) dx = -dx;
-
-  const rawAngle = Math.atan2(dy, dx);
-
-  /* =========================
+  /* ==============================
      anchor
-  ========================= */
+  ============================== */
   const shoulderMid = midpoint(ls, rs);
+
   const hipMid = midpoint(lh, rh);
 
-  const fullBody = hasValidLowerBody(lh, rh);
+  const fullBody =
+    lh && rh &&
+    lh.visibility > 0.5 &&
+    rh.visibility > 0.5;
 
-  /* =========================
+  /* ==============================
      mode smoothing
-  ========================= */
+  ============================== */
   modeSmooth += fullBody ? 0.08 : -0.08;
   modeSmooth = Math.max(0, Math.min(1, modeSmooth));
 
@@ -128,11 +143,12 @@ export function render(pose) {
   let clothWidth;
   let clothHeight;
 
-  /* =========================
+  /* ==============================
      scale + anchor
-  ========================= */
+  ============================== */
   if (useUpperBody) {
-    const shoulderWidth = distance(ls, rs);
+    const shoulderWidth =
+      ls && rs ? distance(ls, rs) : 100;
 
     clothWidth = shoulderWidth * 2.2;
     clothHeight = clothWidth * 1.4;
@@ -147,36 +163,28 @@ export function render(pose) {
     clothWidth = torso * 1.6;
     clothHeight = clothWidth * 1.4;
 
-    center = midpoint(shoulderMid, hipMid);
+    center = shoulderMid;
   }
 
-  /* =========================
-     angle correction
-  ========================= */
-  let targetAngle = rawAngle - Math.PI / 2;
+  /* ==============================
+     angle（安全版）
+  ============================== */
+  let rawAngle = safeShoulderAngle(ls, rs);
 
+  let targetAngle = rawAngle; // 👉 不再亂 -π/2
+
+  /* ==============================
+     smoothing
+  ============================== */
   const diff = angleDiff(targetAngle, currentAngle);
   currentAngle += diff * 0.15;
 
-  /* =========================
+  /* ==============================
      draw
-  ========================= */
+  ============================== */
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  /* =========================
-     debug
-  ========================= */
-  const debug = document.getElementById("debugPanel");
-  if (debug) {
-    debug.innerText =
-      "mode: " + (useUpperBody ? "UPPER" : "FULL") + "\n" +
-      "angle: " + currentAngle.toFixed(2);
-  }
-
-  /* =========================
-     render cloth
-  ========================= */
   ctx.save();
 
   ctx.translate(center.x, center.y);
