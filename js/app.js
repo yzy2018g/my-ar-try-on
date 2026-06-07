@@ -1,215 +1,143 @@
-import { removeBackground } from "./api.js";
 import { initCamera } from "./camera.js";
 import { initPose } from "./pose.js";
-import { initRenderer } from "./renderer.js";
+import {
+    initRenderer,
+    startRenderLoop,
+    setCloth,
+    updateClothFromPose
+} from "./renderer.js";
 
-/* ---------------- DEBUG API TEST ---------------- */
-async function testClothAPI(file) {
-    log("API: START");
+import { removeBackground } from "./api.js";
 
-    const result = await removeBackground(file);
-
-    log("API: SUCCESS");
-
-    const url = result.data[0].url;
-
-    log("IMAGE URL:");
-    log(url);
-
-    return url;
-}
-
-let currentPose = null;
-
-/* ==============================
-   DEBUG (UI safe)
-============================== */
+/* ===============================
+   DEBUG 系統
+================================ */
 let debugLogs = [];
+
 function log(msg) {
-  const time = new Date().toLocaleTimeString();
-  debugLogs.push(`[${time}] ${msg}`);
+    const time = new Date().toLocaleTimeString();
+    debugLogs.push(`[${time}] ${msg}`);
 
-  // 最多保留 8 行（避免爆掉）
-  if (debugLogs.length > 8) {
-    debugLogs.shift();
-  }
+    if (debugLogs.length > 12) {
+        debugLogs.shift();
+    }
 
-  renderDebug();
+    renderDebug();
 }
-function debug(state) {
-  const el = document.getElementById("debugPanel");
-  if (!el) return;
 
-  el.innerText =
+/* ===============================
+   debug panel（狀態顯示）
+================================ */
+function renderDebug() {
+    const el = document.getElementById("debugPanel");
+    if (!el) return;
+
+    el.innerText =
 `[AR DEBUG]
 APP: RUNNING
 
-CAMERA: ${state.camera || "?"}
-VIDEO: ${state.video || "?"}
-POSE: ${state.pose || "?"}
-RENDER: ${state.render || "?"}
-
 --- LOG ---
-${debugLogs.join("\n")}
-`;
-}
-function renderDebug() {
-  // 你原本 debug 需要 state
-  debug({
-    camera: window.cameraState,
-    video: window.videoState,
-    pose: window.poseState,
-    render: window.renderState
-  });
+${debugLogs.join("\n")}`;
 }
 
-/* ==============================
-   MAIN PIPELINE
-============================== */
+/* ===============================
+   全域狀態（可選）
+================================ */
+let video;
+let canvas;
+let pose;
+
+/* ===============================
+   主程式入口
+================================ */
 async function main() {
-  debug({ camera: "INIT", video: "-", pose: "-", render: "-" });
+    log("APP START");
 
-  const video = await initCamera();
+    // -------------------------------
+    // 1. 初始化 camera
+    // -------------------------------
+    const camera = await initCamera();
+    video = camera.video;
+    canvas = camera.canvas;
 
-  if (!video) {
-    debug({ camera: "FAIL", video: "-", pose: "-", render: "-" });
-    return;
-  }
+    log("CAMERA READY");
 
-  debug({ camera: "OK", video: "WAITING", pose: "-", render: "-" });
+    // -------------------------------
+    // 2. 初始化 renderer
+    // -------------------------------
+    initRenderer(canvas, video);
+    startRenderLoop();
 
-  // 等 video ready
-  await new Promise(resolve => {
-    if (video.readyState >= 2) return resolve();
-    video.onloadeddata = () => resolve();
-  });
+    log("RENDERER STARTED");
 
-  debug({ camera: "OK", video: "READY", pose: "-", render: "-" });
-
-  initRenderer();
-  debug({ camera: "OK", video: "READY", pose: "INIT", render: "READY" });
-
-  await initPose(video, (poseData) => {
-    currentPose = poseData;
-
-    debug({
-      camera: "OK",
-      video: "READY",
-      pose: poseData ? "LIVE" : "NULL",
-      render: "RUNNING"
+    // -------------------------------
+    // 3. 初始化 pose
+    // -------------------------------
+    pose = await initPose(video, (landmarks) => {
+        // 每一幀 pose 更新
+        updateClothFromPose(landmarks);
     });
-  });
 
-  debug({
-    camera: "OK",
-    video: "READY",
-    pose: "INIT",
-    render: "RUNNING"
-  });
+    log("POSE READY");
 
-  /* ==============================
-     RENDER LOOP
-  ============================== */
-  function loop() {
-    if (currentPose) {
-      render(currentPose);
-    }
-
-    requestAnimationFrame(loop);
-  }
-
-  loop();
+    // -------------------------------
+    // 4. 綁定 UI
+    // -------------------------------
+    bindUI();
 }
 
-/* ==============================
-   UI
-============================== */
-function setupClothesUI() {
-  const items = document.querySelectorAll(".cloth-item");
+/* ===============================
+   UI（按鈕）
+================================ */
+function bindUI() {
+    const btn = document.getElementById("testBtn");
+    const input = document.getElementById("fileInput");
 
-  if (!items.length) {
-    debug({ camera: "-", video: "-", pose: "NO CLOTH UI", render: "-" });
-    return;
-  }
+    btn.onclick = async () => {
+        log("CLICKED");
 
-  items.forEach(item => {
-    item.addEventListener("click", () => {
-      const cloth = item.getAttribute("data-cloth");
+        const file = input.files[0];
 
-      debug({
-        camera: "OK",
-        video: "READY",
-        pose: currentPose ? "LIVE" : "NULL",
-        render: "RUNNING"
-      });
+        if (!file) {
+            log("NO FILE");
+            return;
+        }
 
-      setCloth(cloth);
+        log(`FILE OK: ${file.name}`);
 
-      items.forEach(i => i.classList.remove("active"));
-      item.classList.add("active");
-    });
-  });
+        try {
+            log("CALLING API...");
 
-  document.getElementById("btn-reset")?.addEventListener("click", () => {
-    currentPose = null;
+            // -------------------------------
+            // 5. 呼叫去背 API
+            // -------------------------------
+            const result = await removeBackground(file);
 
-    debug({
-      camera: "OK",
-      video: "READY",
-      pose: "RESET",
-      render: "RUNNING"
-    });
-  });
+            log("API SUCCESS");
 
-  document.getElementById("btn-screenshot")?.addEventListener("click", () => {
-    debug({
-      camera: "OK",
-      video: "READY",
-      pose: currentPose ? "LIVE" : "NULL",
-      render: "RUNNING"
-    });
-  });
+            const url = result.data[0].url;
+
+            log("IMAGE READY");
+
+            // -------------------------------
+            // 6. 載入衣服圖片
+            // -------------------------------
+            const img = new Image();
+            img.src = url;
+
+            img.onload = () => {
+                setCloth(img);
+                log("CLOTH SET TO RENDERER");
+            };
+
+        } catch (err) {
+            log("API ERROR");
+            log(err.message || String(err));
+        }
+    };
 }
 
-/* ==============================
-   BOOTSTRAP (SAFE)
-============================== */
-window.addEventListener("DOMContentLoaded", () => {
-  const startBtn = document.getElementById("startBtn");
-
-  if (!startBtn) {
-    console.error("startBtn not found");
-    return;
-  }
-
-  setupClothesUI();
-
-  startBtn.addEventListener("click", async () => {
-    startBtn.style.display = "none";
-    await main();
-  });
-});
-
-document.getElementById("testBtn").onclick = async () => {
-    const file =
-        document.getElementById("fileInput").files[0];
-
-    if (!file) {
-        log("NO FILE");
-        return;
-    }
-
-    const url = await testClothAPI(file);
-
-    // Step 2 👇
-    const img = new Image();
-    img.src = url;
-
-    img.style.width = "200px";
-    img.style.position = "absolute";
-    img.style.top = "120px";
-    img.style.left = "10px";
-    img.style.zIndex = 9999;
-
-    document.body.appendChild(img);
-};
+/* ===============================
+   啟動
+================================ */
+main();
