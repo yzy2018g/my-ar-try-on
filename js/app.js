@@ -4,51 +4,64 @@ import { initRenderer, render, setCloth } from "./renderer.js";
 
 let currentPose = null;
 
-function debug(msg) {
+function debug(state) {
   const el = document.getElementById("debugPanel");
-  if (el) el.innerText = msg;
-  console.log(msg);
+  if (!el) return;
+
+  el.innerText =
+`[AR DEBUG]
+APP: RUNNING
+
+CAMERA: ${state.camera || "?"}
+VIDEO: ${state.video || "?"}
+POSE: ${state.pose || "?"}
+RENDER: ${state.render || "?"}
+`;
 }
 
 /* ==============================
    MAIN
 ============================== */
 async function main() {
-  debug("APP START");
+  debug({ camera: "INIT", video: "-", pose: "-", render: "-" });
 
-  // 1. Camera
   const video = await initCamera();
+
   if (!video) {
-    debug("CAMERA FAIL");
+    debug({ camera: "FAIL", video: "-", pose: "-", render: "-" });
     return;
   }
 
-  debug("CAMERA OK");
+  debug({ camera: "OK", video: "WAITING", pose: "-", render: "-" });
 
-  // 🔥 等 video ready（很重要）
   await new Promise(resolve => {
-    if (video.videoWidth > 0) return resolve();
-    video.onloadedmetadata = () => resolve();
+    video.onloadeddata = () => resolve();
   });
 
-  // 2. Renderer
-  initRenderer();
-  debug("RENDERER OK");
+  debug({ camera: "OK", video: "READY", pose: "-", render: "-" });
 
-  // 3. Pose
+  initRenderer();
+
   await initPose(video, (poseData) => {
     currentPose = poseData;
+    debug({
+      camera: "OK",
+      video: "READY",
+      pose: poseData ? "LIVE" : "NULL",
+      render: "RUNNING"
+    });
   });
 
-  debug("POSE OK");
+  debug({
+    camera: "OK",
+    video: "READY",
+    pose: "INIT",
+    render: "RUNNING"
+  });
 
-  // 4. UI
-  setupClothesUI();
-  debug("UI READY");
-
-  // 5. Render loop
   function loop() {
     if (currentPose) render(currentPose);
+
     requestAnimationFrame(loop);
   }
 
