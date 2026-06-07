@@ -124,7 +124,7 @@ export function render(pose) {
   );
 
   // 修正模型本身偏移（90度校正）
-  const correctedAngle = rawAngle - Math.PI / 2;
+  const correctedAngle = rawAngle ;
 
   // 🔥 核心：角度平滑（避免 ±π 跳動）
   const diff = angleDiff(correctedAngle, currentAngle);
