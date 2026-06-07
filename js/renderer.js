@@ -1,58 +1,22 @@
 import { drawVideo } from "./rendererVideo.js";
 import { drawCloth } from "./rendererCloth.js";
 
-let canvas, ctx;
-let video;
+let canvas, ctx, video;
 let clothImg = new Image();
-
 let clothReady = false;
 
 const MIRROR = true;
 
-/* ==============================
-   init
-============================== */
+/* init */
 export function initRenderer() {
   canvas = document.getElementById("canvas");
   ctx = canvas.getContext("2d");
-
   video = document.getElementById("video");
-
-  loadCloth("style_1.png");
-
-  resize();
-  window.addEventListener("resize", resize);
 }
 
-/* ==============================
-   cloth loader
-============================== */
-function loadCloth(src) {
-  clothReady = false;
-
-  clothImg = new Image();
-  clothImg.src = `assets/clothes/${src}`;
-
-  clothImg.onload = () => {
-    clothReady = true;
-  };
-}
-
-/* ==============================
-   resize
-============================== */
-function resize() {
-  if (!video || !video.videoWidth) return;
-
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-}
-
-/* ==============================
-   render loop
-============================== */
+/* render */
 export function render(pose) {
-  if (!pose || !clothReady || !video) return;
+  if (!pose || !clothReady) return;
 
   const w = canvas.width;
   const h = canvas.height;
@@ -60,7 +24,7 @@ export function render(pose) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
-  // 🎥 背景 video
+  // 背景
   drawVideo(ctx, video, w, h);
 
   ctx.save();
@@ -70,7 +34,7 @@ export function render(pose) {
     ctx.translate(-w, 0);
   }
 
-  // 👕 衣服
+  // 衣服
   drawCloth(ctx, pose, clothImg, { MIRROR });
 
   ctx.restore();
