@@ -97,12 +97,12 @@ export function render(pose) {
      👉 解決 90 度問題
   ========================= */
   const rawAngle = Math.atan2(
-  rs.y - ls.y,
-  rs.x - ls.x
-);
+    rs.y - ls.y,
+    rs.x - ls.x
+  );
 
-// 🔥 修正衣服貼圖朝向
-const targetAngle = rawAngle;
+  // 🔥 修正衣服貼圖朝向
+  const targetAngle = rawAngle - Math.PI / 2;
 
   // smoothing（避免抖動）
   currentAngle = currentAngle * 0.8 + targetAngle * 0.2;
