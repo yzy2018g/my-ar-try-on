@@ -5,19 +5,31 @@ import { initRenderer } from "./renderer.js";
 
 /* ---------------- DEBUG API TEST ---------------- */
 async function testClothAPI(file) {
-  const formData = new FormData();
-  formData.append("file", file);
+  log("API: START");
 
-  const res = await fetch(
-    "https://michaelyo-my-ar-cloth-api.hf.space/process_cloth",
-    {
-      method: "POST",
-      body: formData
-    }
-  );
+  if (!file) {
+    log("API: NO FILE");
+    return null;
+  }
 
-  const data = await res.json();
-  return data.url;
+  try {
+    log(`API: FILE OK (${file.name})`);
+
+    const result = await removeBackground(file);
+
+    log("API: SUCCESS");
+
+    console.log(result);
+
+    return result;
+
+  } catch (err) {
+    log("API: ERROR");
+    log(err.message || String(err));
+
+    console.error(err);
+    return null;
+  }
 }
 
 
