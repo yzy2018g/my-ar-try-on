@@ -64,8 +64,6 @@ export function updateClothFromPose(landmarks) {
    RENDER LOOP
 ================================ */
 export function render() {
-   ctx.fillStyle = "yellow";
-ctx.fillRect(x - 5, y - 5, 10, 10);
     if (!ctx || !video) return;
 
     const w = canvas.width;
@@ -74,7 +72,13 @@ ctx.fillRect(x - 5, y - 5, 10, 10);
     // background
     ctx.drawImage(video, 0, 0, w, h);
 
-    // debug overlay（一定畫）
+    const x = clothX * w;
+    const y = clothY * h;
+
+    // 🔥 DEBUG 點（一定要在 x/y 後面）
+    ctx.fillStyle = "yellow";
+    ctx.fillRect(x - 5, y - 5, 10, 10);
+
     drawDebugOverlay();
 
     // center test point
@@ -88,9 +92,6 @@ ctx.fillRect(x - 5, y - 5, 10, 10);
         return;
     }
 
-    const x = clothX * w;
-    const y = clothY * h;
-
     const baseW = clothImg.naturalWidth;
     const baseH = clothImg.naturalHeight;
 
@@ -102,7 +103,6 @@ ctx.fillRect(x - 5, y - 5, 10, 10);
     ctx.translate(x, y);
     ctx.rotate(clothAngle);
 
-    // 🔵 bounding box（看得到就代表有畫）
     ctx.strokeStyle = "lime";
     ctx.lineWidth = 2;
     ctx.strokeRect(-cw / 2, -ch / 2, cw, ch);
