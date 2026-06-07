@@ -89,6 +89,8 @@ export function updateClothFromPose(landmarks) {
    RENDER
 ================================ */
 export function render() {
+   ctx.fillStyle = "blue";
+ctx.fillRect(0, 0, 200, 200);
     if (!ctx || !video) return;
 
     const w = canvas.width;
