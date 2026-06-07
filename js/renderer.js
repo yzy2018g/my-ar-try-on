@@ -148,7 +148,7 @@ export function render(pose) {
   ctx.drawImage(
     clothImg,
     centerX - clothWidth / 2,
-    centerY - clothHeight * 0.25,
+    centerY - clothHeight * 0.15,
     clothWidth,
     clothHeight
   );
