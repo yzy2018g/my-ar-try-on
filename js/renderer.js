@@ -17,17 +17,12 @@ export function initRenderer(c, v) {
     canvas = c;
     video = v;
 
-    if (!canvas || !video) {
-        console.error("❌ canvas or video is null");
-        return;
-    }
+    if (!canvas || !video) return;
 
     ctx = canvas.getContext("2d");
 
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
-
-    console.log("✅ Renderer init OK");
 }
 
 /* ===============================
@@ -36,8 +31,6 @@ export function initRenderer(c, v) {
 export function setCloth(img) {
     clothImg = img;
     clothReady = true;
-
-    console.log("🧥 Cloth set OK");
 }
 
 /* ===============================
@@ -48,21 +41,23 @@ export function updateClothFromPose(landmarks) {
 
     const ls = landmarks[11];
     const rs = landmarks[12];
-
     if (!ls || !rs) return;
 
-    clothX = (ls.x + rs.x) / 2;
-    clothY = (ls.y + rs.y) / 2;
+    // smoothing（避免抖動）
+    clothX = clothX * 0.7 + ((ls.x + rs.x) / 2) * 0.3;
+    clothY = clothY * 0.7 + ((ls.y + rs.y) / 2) * 0.3;
 
-    clothAngle = Math.atan2(
-        rs.y - ls.y,
-        rs.x - ls.x
-    );
+    // angle（簡單穩定）
+    let rawAngle = Math.atan2(rs.y - ls.y, rs.x - ls.x);
+    if (Math.abs(rawAngle) > Math.PI / 2) rawAngle += Math.PI;
+    clothAngle = rawAngle;
 
+    // scale（修正成畫面比例）
     const dx = rs.x - ls.x;
     const dy = rs.y - ls.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
 
-    clothScale = Math.sqrt(dx * dx + dy * dy) * 2.2;
+    clothScale = dist * 2.5;
 }
 
 /* ===============================
@@ -74,49 +69,43 @@ export function render() {
     const w = canvas.width;
     const h = canvas.height;
 
-    // 🔥 永遠畫背景
+    // background
     ctx.drawImage(video, 0, 0, w, h);
 
-    // 🔥 DEBUG（一定要先顯示）
-    arDebug();
+    // debug overlay（一定畫）
+    drawDebugOverlay();
 
-    // 🔴 測試點（一定會看到，用來判斷 canvas 是否正常）
+    // center test point
     ctx.fillStyle = "red";
     ctx.beginPath();
-    ctx.arc(w / 2, h / 2, 8, 0, Math.PI * 2);
+    ctx.arc(w / 2, h / 2, 6, 0, Math.PI * 2);
     ctx.fill();
 
-    // cloth check（不阻止 debug）
-    if (!clothReady) {
-        console.log("cloth not ready");
-        return;
-    }
-
-    if (!clothImg || clothImg.naturalWidth === 0) {
-        console.log("cloth not loaded");
+    // cloth check
+    if (!clothReady || !clothImg || clothImg.naturalWidth === 0) {
         return;
     }
 
     const x = clothX * w;
     const y = clothY * h;
 
-    const cw = clothImg.width * clothScale;
-    const ch = clothImg.height * clothScale;
+    const baseW = clothImg.naturalWidth;
+    const baseH = clothImg.naturalHeight;
 
-    console.log("DRAW CLOTH", { x, y, clothScale });
+    const cw = baseW * clothScale;
+    const ch = baseH * clothScale;
 
     ctx.save();
 
     ctx.translate(x, y);
     ctx.rotate(clothAngle);
 
-    ctx.drawImage(
-        clothImg,
-        -cw / 2,
-        -ch / 2,
-        cw,
-        ch
-    );
+    // 🔵 bounding box（看得到就代表有畫）
+    ctx.strokeStyle = "lime";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-cw / 2, -ch / 2, cw, ch);
+
+    ctx.drawImage(clothImg, -cw / 2, -ch / 2, cw, ch);
 
     ctx.restore();
 }
@@ -129,26 +118,44 @@ export function startRenderLoop() {
         render();
         requestAnimationFrame(loop);
     }
-
-    console.log("🎬 Render loop started");
     loop();
 }
 
 /* ===============================
-   DEBUG PANEL
+   DEBUG OVERLAY（畫面內 debug）
 ================================ */
-function arDebug() {
-    const el = document.getElementById("debugPanel");
-    if (!el) return;
+function drawDebugOverlay() {
+    if (!ctx || !canvas) return;
 
-    el.innerText =
-`[AR DEBUG]
+    const w = canvas.width;
 
-CLOTH READY: ${clothReady}
-IMG WIDTH: ${clothImg?.naturalWidth}
-X: ${clothX.toFixed(3)}
-Y: ${clothY.toFixed(3)}
-SCALE: ${clothScale.toFixed(3)}
-ANGLE: ${(clothAngle * 180 / Math.PI).toFixed(1)}°
-`;
+    ctx.save();
+
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect(0, 0, 280, 170);
+
+    ctx.fillStyle = "white";
+    ctx.font = "14px monospace";
+
+    const lines = [
+        `CLOTH: ${clothReady ? "YES" : "NO"}`,
+        `IMG: ${clothImg?.naturalWidth || 0}x${clothImg?.naturalHeight || 0}`,
+        `SCALE: ${clothScale.toFixed(3)}`,
+        `ANGLE: ${(clothAngle * 180 / Math.PI).toFixed(1)}`,
+        `POS: ${clothX.toFixed(2)}, ${clothY.toFixed(2)}`
+    ];
+
+    let y = 20;
+    for (const l of lines) {
+        ctx.fillText(l, 10, y);
+        y += 20;
+    }
+
+    // shoulder point
+    ctx.fillStyle = "cyan";
+    ctx.beginPath();
+    ctx.arc(clothX * w, clothY * canvas.height, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
 }
