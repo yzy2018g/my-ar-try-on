@@ -11,27 +11,32 @@ let clothAngle = 0;
 let clothScale = 1;
 
 /* ===============================
-   INIT RENDERER（防炸版）
+   INIT RENDERER
 ================================ */
 export function initRenderer(c, v) {
-    if (!c) {
+    canvas = c;
+    video = v;
+
+    if (!canvas) {
         console.error("❌ canvas is null");
         return;
     }
 
-    if (!v) {
+    if (!video) {
         console.error("❌ video is null");
         return;
     }
 
-    canvas = c;
     ctx = canvas.getContext("2d");
-    video = v;
 
     if (!ctx) {
         console.error("❌ ctx is null");
         return;
     }
+
+    // 🔥 強制對齊 video size（非常重要）
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
 
     console.log("✅ Renderer init OK");
 }
@@ -42,6 +47,8 @@ export function initRenderer(c, v) {
 export function setCloth(img) {
     clothImg = img;
     clothReady = true;
+
+    console.log("🧥 Cloth set");
 }
 
 /* ===============================
@@ -70,22 +77,30 @@ export function updateClothFromPose(landmarks) {
 }
 
 /* ===============================
-   RENDER LOOP（防炸版）
+   RENDER LOOP
 ================================ */
 export function render() {
     if (!ctx || !video) return;
 
-    const w = canvas.width || 640;
-    const h = canvas.height || 480;
+    const w = canvas.width;
+    const h = canvas.height;
 
-    // video 背景
+    // 🔥 一定要看到這個（確認 loop 活著）
+    console.log("RENDER LOOP ALIVE");
+
+    // background
     try {
         ctx.drawImage(video, 0, 0, w, h);
     } catch (e) {
         console.error("video draw error", e);
     }
 
-    if (!clothReady || !clothImg.complete) return;
+    // 🔥 debug 永遠先跑（不要被 return 擋掉）
+    arDebug();
+
+    // cloth check（修正重點）
+    if (!clothReady) return;
+    if (!clothImg || clothImg.naturalWidth === 0) return;
 
     const x = clothX * w;
     const y = clothY * h;
@@ -107,21 +122,14 @@ export function render() {
     );
 
     ctx.restore();
-
-   arDebug();
 }
 
 /* ===============================
-   LOOP（一定不會卡死版）
+   LOOP
 ================================ */
 export function startRenderLoop() {
     function loop() {
-        try {
-            render();
-        } catch (e) {
-            console.error("render loop error:", e);
-        }
-
+        render();
         requestAnimationFrame(loop);
     }
 
@@ -129,6 +137,9 @@ export function startRenderLoop() {
     loop();
 }
 
+/* ===============================
+   AR DEBUG（一定會顯示）
+================================ */
 function arDebug() {
     const el = document.getElementById("debugPanel");
     if (!el) return;
@@ -138,6 +149,7 @@ function arDebug() {
 
 CLOTH READY: ${clothReady}
 IMG LOADED: ${clothImg?.complete}
+NATURAL WIDTH: ${clothImg?.naturalWidth}
 X: ${clothX.toFixed(3)}
 Y: ${clothY.toFixed(3)}
 SCALE: ${clothScale.toFixed(3)}
