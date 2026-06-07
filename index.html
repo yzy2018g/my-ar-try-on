@@ -16,6 +16,7 @@
       AR Virtual Try-On (Phase 1)
     </header>
 
+    <!-- 🔥 加 start button（手機必須） -->
     <button id="startBtn" style="
       position:absolute;
       top:60px;
@@ -28,28 +29,26 @@
     </button>
 
     <div class="camera-container">
+
       <video id="video" autoplay playsinline muted preload="auto"></video>
       <canvas id="canvas"></canvas>
+
     </div>
 
-    <!-- ==============================
-         CLOTHES PANEL（已更新去背素材）
-    ============================== -->
     <div class="clothes-panel">
-
-      <div class="cloth-item" data-cloth="assets/clothes/black-short.png">
+      <div class="cloth-item" data-cloth="black-short.png">
         <img src="assets/clothes/black-short.png" />
-        <span>Black Short</span>
+        <span>Style 1</span>
       </div>
 
-      <div class="cloth-item" data-cloth="assets/clothes/black1.png">
+      <div class="cloth-item" data-cloth="black1.png">
         <img src="assets/clothes/black1.png" />
-        <span>Black Style</span>
+        <span>Style 2</span>
       </div>
 
-      <div class="cloth-item" data-cloth="assets/clothes/blue-suit.png">
+      <div class="cloth-item" data-cloth="blue-suit.png">
         <img src="assets/clothes/blue-suit.png" />
-        <span>Blue Suit</span>
+        <span>Style 3</span>
       </div>
 
     </div>
@@ -63,9 +62,11 @@
 
   <div id="debugPanel"></div>
 
-  <!-- MediaPipe -->
+  <!-- 🔥 MediaPipe 必加 -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
 
+  <!-- 🔥 改成 module -->
+  
   <script type="module" src="js/app.js"></script>
 
 </body>
