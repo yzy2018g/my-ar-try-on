@@ -1,4 +1,4 @@
-import { midpoint, distance } from "./math.js";
+import { midpoint, distance, angle } from "./math.js";
 
 let canvas, ctx;
 let clothImg = new Image();
@@ -6,8 +6,11 @@ let clothImg = new Image();
 let currentCloth = "style_1.png";
 let clothReady = false;
 
-// 🔥 平滑角度（避免抖動）
+// 🔥 平滑角度
 let currentAngle = 0;
+
+// 🔥 模式平滑（避免 full/upper 閃爍）
+let modeSmooth = 0;
 
 /* =========================
    初始化
@@ -31,20 +34,14 @@ function loadCloth(src) {
   clothImg = new Image();
 
   clothImg.onload = () => {
-    console.log("CLOTH LOADED:", src);
     clothReady = true;
-  };
-
-  clothImg.onerror = () => {
-    console.log("CLOTH FAILED:", src);
-    clothReady = false;
   };
 
   clothImg.src = `assets/clothes/${src}`;
 }
 
 /* =========================
-   resize canvas
+   resize
 ========================= */
 function resizeCanvas() {
   const video = document.getElementById("video");
@@ -63,13 +60,25 @@ export function setCloth(src) {
 }
 
 /* =========================
-   角度 wrap（防 180°跳動）
+   angle diff
 ========================= */
 function angleDiff(a, b) {
   let d = a - b;
   while (d > Math.PI) d -= 2 * Math.PI;
   while (d < -Math.PI) d += 2 * Math.PI;
   return d;
+}
+
+/* =========================
+   visibility 判斷
+========================= */
+function hasValidLowerBody(lh, rh) {
+  return (
+    lh &&
+    rh &&
+    lh.visibility > 0.5 &&
+    rh.visibility > 0.5
+  );
 }
 
 /* =========================
@@ -83,65 +92,81 @@ export function render(pose) {
   const lh = pose.leftHip;
   const rh = pose.rightHip;
 
-  if (!ls || !rs || !lh || !rh) return;
+  if (!ls || !rs) return;
 
   /* =========================
-     1. anchor
+     anchor
   ========================= */
   const shoulderMid = midpoint(ls, rs);
   const hipMid = midpoint(lh, rh);
-  const center = midpoint(shoulderMid, hipMid);
+
+  const fullBody = hasValidLowerBody(lh, rh);
 
   /* =========================
-     2. scale
+     mode smoothing
   ========================= */
-  const torso = distance(shoulderMid, hipMid);
-  const clothWidth = torso * 1.6;
-  const clothHeight = clothWidth * 1.4;
+  modeSmooth += fullBody ? 0.08 : -0.08;
+  modeSmooth = Math.max(0, Math.min(1, modeSmooth));
+
+  const useUpperBody = modeSmooth < 0.5;
+
+  let center;
+  let clothWidth;
+  let clothHeight;
 
   /* =========================
-     3. angle (FIXED VERSION)
-     - 解 180° flip
-     - 解 90° offset
-     - 防 camera mirroring
+     scale + anchor
   ========================= */
+  if (useUpperBody) {
+    // 🔥 上半身模式（穩定）
+    const shoulderWidth = distance(ls, rs);
 
-  const dx = rs.x - ls.x;
-  const dy = rs.y - ls.y;
+    clothWidth = shoulderWidth * 2.2;
+    clothHeight = clothWidth * 1.4;
 
-  // 基礎角度
-  let rawAngle = Math.atan2(dy, dx);
+    center = {
+      x: shoulderMid.x,
+      y: shoulderMid.y + clothHeight * 0.25
+    };
+  } else {
+    // 🔥 全身模式
+    const torso = distance(shoulderMid, hipMid);
 
-  // 🔥 解 180°翻轉（鏡像/左右反轉問題）
-  if (dx < 0) {
-    rawAngle += Math.PI;
+    clothWidth = torso * 1.6;
+    clothHeight = clothWidth * 1.4;
+
+    center = midpoint(shoulderMid, hipMid);
   }
 
-  // 🔥 90°修正（衣服直立對齊）
-  const correctedAngle = rawAngle - Math.PI / 2;
+  /* =========================
+     angle (核心穩定)
+  ========================= */
+  let rawAngle = angle(ls, rs);
+  let targetAngle = rawAngle - Math.PI / 2;
 
-  // 🔥 平滑（用 circular interpolation）
-  const diff = angleDiff(correctedAngle, currentAngle);
+  // 🔥 平滑角度
+  const diff = angleDiff(targetAngle, currentAngle);
   currentAngle += diff * 0.15;
 
   /* =========================
-     4. clear canvas
+     clear
   ========================= */
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   /* =========================
-     5. debug
+     debug
   ========================= */
   const debug = document.getElementById("debugPanel");
   if (debug) {
     debug.innerText =
-      "torso: " + torso.toFixed(2) + "\n" +
+      "mode: " + (useUpperBody ? "UPPER" : "FULL") + "\n" +
+      "modeSmooth: " + modeSmooth.toFixed(2) + "\n" +
       "angle: " + currentAngle.toFixed(2);
   }
 
   /* =========================
-     6. draw cloth
+     draw cloth
   ========================= */
   ctx.save();
 
