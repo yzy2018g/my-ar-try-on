@@ -17,50 +17,37 @@ export function initRenderer(c, v) {
     canvas = c;
     video = v;
 
-    if (!canvas || !video) {
-        console.error("❌ canvas or video missing");
-        return;
-    }
+    if (!canvas || !video) return;
 
     ctx = canvas.getContext("2d");
 
-    function setupCanvas() {
+    const setup = () => {
         const w = video.videoWidth;
         const h = video.videoHeight;
 
-        // ❗ fallback，避免 0x0
-        const cw = w > 0 ? w : 640;
-        const ch = h > 0 ? h : 480;
+        if (!w || !h) {
+            console.warn("Video size not ready");
+            return;
+        }
 
-        // 👉 real pixel size（AR 正確關鍵）
-        canvas.width = cw;
-        canvas.height = ch;
+        canvas.width = w;
+        canvas.height = h;
 
-        // 👉 CSS size（畫面顯示）
         canvas.style.width = "100%";
         canvas.style.height = "100%";
-        canvas.style.display = "block";
 
-        // 👉 debug：避免被蓋掉（如果你還看不到就打開）
         canvas.style.position = "absolute";
         canvas.style.top = "0";
         canvas.style.left = "0";
         canvas.style.zIndex = "2";
-        canvas.style.pointerEvents = "none";
+    };
 
-        console.log("✅ Canvas ready:", cw, ch);
-    }
-
-    // 👉 video 還沒 ready 就等
+    // 🔥 這行是關鍵
     if (video.readyState >= 2) {
-        setupCanvas();
+        setup();
     } else {
-        video.onloadedmetadata = setupCanvas;
+        video.onloadedmetadata = setup;
     }
-
-    // 🔥 最後保險：強制顯示測試（可刪）
-    ctx.fillStyle = "rgba(255,0,0,0.2)";
-    ctx.fillRect(0, 0, 50, 50);
 }
 
 /* ===============================
