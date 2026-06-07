@@ -14,8 +14,7 @@ let clothScale = 1;
    INIT RENDERER
 ================================ */
 export function initRenderer(c, v) {
-   ctx.fillStyle = "red";
-ctx.fillRect(0, 0, 100, 100);
+   
     canvas = c;
     video = v;
 
@@ -25,6 +24,9 @@ ctx.fillRect(0, 0, 100, 100);
 
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
+
+    ctx.fillStyle = "red";
+    ctx.fillRect(0, 0, 100, 100);
 }
 
 /* ===============================
