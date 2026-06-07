@@ -1,8 +1,19 @@
+import {
+  midpoint,
+  distance,
+  angle,
+  shoulderWidth,
+  torsoHeight,
+  bodyCenter
+} from "./math.js";
+
 let canvas, ctx;
 let clothImg = new Image();
 
 let currentCloth = "style_1.png";
 let clothReady = false;
+
+let currentAngle = 0;
 
 export function initRenderer() {
   canvas = document.getElementById("canvas");
@@ -15,7 +26,7 @@ export function initRenderer() {
 }
 
 /* =========================
-   載入衣服
+   load cloth
 ========================= */
 function loadCloth(src) {
   clothReady = false;
@@ -36,18 +47,15 @@ function loadCloth(src) {
 }
 
 /* =========================
-   Canvas size
+   resize canvas
 ========================= */
 function resizeCanvas() {
   const video = document.getElementById("video");
 
   if (!video) return;
 
-  const w = video.videoWidth || 640;
-  const h = video.videoHeight || 480;
-
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
 }
 
 /* =========================
@@ -59,68 +67,73 @@ export function setCloth(src) {
 }
 
 /* =========================
-   DEBUG + RENDER CORE
+   MAIN RENDER (Phase 2)
 ========================= */
 export function render(pose) {
-  if (!pose) return;
+  if (!pose || !clothReady) return;
 
-  const left = pose.leftShoulder;
-  const right = pose.rightShoulder;
+  const leftShoulder = pose.leftShoulder;
+  const rightShoulder = pose.rightShoulder;
+  const leftHip = pose.leftHip;
+  const rightHip = pose.rightHip;
 
-  if (!left || !right) return;
+  if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) return;
 
-  const debug = document.getElementById("debugPanel");
+  // =========================
+  // 1. anchors
+  // =========================
+  const shoulderMid = midpoint(leftShoulder, rightShoulder);
+  const hipMid = midpoint(leftHip, rightHip);
 
-  // 🔥 1. 清畫面
+  const center = bodyCenter(shoulderMid, hipMid, 0.45);
+
+  // =========================
+  // 2. scale (torso-based)
+  // =========================
+  const torso = distance(shoulderMid, hipMid);
+  const clothWidth = torso * 1.6;
+  const clothHeight = clothWidth * 1.4;
+
+  // =========================
+  // 3. rotation (stable torso angle)
+  // =========================
+  const targetAngle = angle(hipMid, shoulderMid);
+
+  // smoothing (避免抖動)
+  currentAngle = currentAngle * 0.8 + targetAngle * 0.2;
+
+  // =========================
+  // 4. clear canvas
+  // =========================
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  /* =========================
-     2. 畫肩膀點（最重要 debug）
-  ========================= */
-  ctx.fillStyle = "red";
-  ctx.fillRect(left.x - 5, left.y - 5, 10, 10);
-
-  ctx.fillStyle = "blue";
-  ctx.fillRect(right.x - 5, right.y - 5, 10, 10);
-
-  /* =========================
-     3. debug panel
-  ========================= */
+  // =========================
+  // 5. DEBUG (optional)
+  // =========================
+  const debug = document.getElementById("debugPanel");
   if (debug) {
     debug.innerText =
-      "LEFT: " + left.x + "," + left.y + "\n" +
-      "RIGHT: " + right.x + "," + right.y + "\n" +
-      "clothReady: " + clothReady;
+      "torso: " + torso.toFixed(2) + "\n" +
+      "angle: " + currentAngle.toFixed(2);
   }
 
-  /* =========================
-     4. 如果衣服沒載好 → 停
-  ========================= */
-  if (!clothReady) return;
+  // =========================
+  // 6. draw cloth (stable AR)
+  // =========================
+  ctx.save();
 
-  /* =========================
-     5. 計算中心點
-  ========================= */
-  const centerX = (left.x + right.x) / 2;
-  const centerY = (left.y + right.y) / 2;
+  ctx.translate(center.x, center.y);
+  ctx.rotate(currentAngle);
 
-  const shoulderWidth = Math.hypot(
-    right.x - left.x,
-    right.y - left.y
-  );
-
-  const clothWidth = shoulderWidth * 2.0;
-  const clothHeight = clothWidth * 1.3;
-
-  /* =========================
-     6. 畫衣服（先不旋轉）
-  ========================= */
+  // 🔥 anchor: top-center of cloth
   ctx.drawImage(
     clothImg,
-    centerX - clothWidth / 2,
-    centerY,
+    -clothWidth / 2,
+    -clothHeight * 0.2,
     clothWidth,
     clothHeight
   );
+
+  ctx.restore();
 }
