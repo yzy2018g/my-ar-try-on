@@ -1,6 +1,8 @@
 export function drawVideo(ctx, video, w, h) {
-  // ❗ video 還沒 ready 直接 skip（避免 crash）
+  const vw = video?.videoWidth || w || 640;
+  const vh = video?.videoHeight || h || 480;
+
   if (!video || video.readyState < 2) return;
 
-  ctx.drawImage(video, 0, 0, w, h);
+  ctx.drawImage(video, 0, 0, vw, vh);
 }
