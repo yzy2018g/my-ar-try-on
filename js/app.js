@@ -5,33 +5,32 @@ import { initRenderer } from "./renderer.js";
 
 /* ---------------- DEBUG API TEST ---------------- */
 async function testClothAPI(file) {
-  log("API: START");
+    log("API: START");
 
-  if (!file) {
-    log("API: NO FILE");
-    return null;
-  }
+    if (!file) {
+        log("API: NO FILE");
+        return null;
+    }
 
-  try {
-    log(`API: FILE OK (${file.name})`);
+    try {
+        log(`API: FILE OK (${file.name})`);
 
-    const result = await removeBackground(file);
+        const result = await removeBackground(file);
 
-    log("API: SUCCESS");
+        log("API: SUCCESS");
 
-    console.log(result);
+        // 印出完整回傳內容
+        log("RESULT:");
+        log(JSON.stringify(result));
 
-    return result;
+        return result;
 
-  } catch (err) {
-    log("API: ERROR");
-    log(err.message || String(err));
-
-    console.error(err);
-    return null;
-  }
+    } catch (err) {
+        log("API: ERROR");
+        log(err.message || String(err));
+        return null;
+    }
 }
-
 
 let currentPose = null;
 
