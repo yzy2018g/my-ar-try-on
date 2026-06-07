@@ -8,8 +8,6 @@ export function drawCloth(ctx, pose, clothImg, config) {
 
   const ls = pose.leftShoulder;
   const rs = pose.rightShoulder;
-  const lh = pose.leftHip;
-  const rh = pose.rightHip;
 
   if (!ls || !rs) return;
 
@@ -30,7 +28,7 @@ export function drawCloth(ctx, pose, clothImg, config) {
   const shoulderWidth = Math.hypot(dx, dy);
 
   /* ==============================
-     cloth size
+     cloth size（比例）
   ============================== */
   const width = shoulderWidth * 2.2;
   const height = width * 1.4;
@@ -38,11 +36,11 @@ export function drawCloth(ctx, pose, clothImg, config) {
   /* ==============================
      angle
   ============================== */
-  const rawAngle = safeShoulderAngle(ls, rs, MIRROR, 0);
+  const rawAngle = safeShoulderAngle(ls, rs, MIRROR);
   const angle = smoothAngle(rawAngle);
 
   /* ==============================
-     draw cloth
+     render cloth
   ============================== */
   ctx.save();
 
