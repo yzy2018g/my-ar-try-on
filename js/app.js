@@ -1,6 +1,7 @@
 import { initCamera } from "./camera.js";
 import { initPose } from "./pose.js";
 import { initRenderer, render, setCloth } from "./renderer.js";
+import { handleClothChange } from "./clothPipeline.js";
 
 let currentPose = null;
 
@@ -37,7 +38,6 @@ async function main() {
 
   debug({ camera: "OK", video: "WAITING", pose: "-", render: "-" });
 
-  // 等 video ready
   await new Promise(resolve => {
     if (video.readyState >= 2) return resolve();
     video.onloadeddata = () => resolve();
@@ -46,6 +46,7 @@ async function main() {
   debug({ camera: "OK", video: "READY", pose: "-", render: "-" });
 
   initRenderer();
+
   debug({ camera: "OK", video: "READY", pose: "INIT", render: "READY" });
 
   await initPose(video, (poseData) => {
@@ -73,7 +74,6 @@ async function main() {
     if (currentPose) {
       render(currentPose);
     }
-
     requestAnimationFrame(loop);
   }
 
@@ -92,8 +92,21 @@ function setupClothesUI() {
   }
 
   items.forEach(item => {
-    item.addEventListener("click", () => {
+    item.addEventListener("click", async () => {
       const cloth = item.getAttribute("data-cloth");
+
+      debug({
+        camera: "OK",
+        video: "READY",
+        pose: currentPose ? "LIVE" : "NULL",
+        render: "LOADING CLOTH"
+      });
+
+      // 🔥 核心：先去背再套用
+      await handleClothChange(cloth);
+
+      items.forEach(i => i.classList.remove("active"));
+      item.classList.add("active");
 
       debug({
         camera: "OK",
@@ -101,11 +114,6 @@ function setupClothesUI() {
         pose: currentPose ? "LIVE" : "NULL",
         render: "RUNNING"
       });
-
-      setCloth(cloth);
-
-      items.forEach(i => i.classList.remove("active"));
-      item.classList.add("active");
     });
   });
 
@@ -131,7 +139,7 @@ function setupClothesUI() {
 }
 
 /* ==============================
-   BOOTSTRAP (SAFE)
+   BOOTSTRAP
 ============================== */
 window.addEventListener("DOMContentLoaded", () => {
   const startBtn = document.getElementById("startBtn");
