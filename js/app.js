@@ -1,5 +1,5 @@
-//import { initCamera } from "./camera.js";
-//import { initPose } from "./pose.js";
+import { initCamera } from "./camera.js";
+import { initPose } from "./pose.js";
 import { initRenderer, render, setCloth } from "./renderer.js";
 
 let currentPose = null;
