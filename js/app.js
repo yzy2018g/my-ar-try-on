@@ -165,3 +165,20 @@ window.addEventListener("DOMContentLoaded", () => {
     await main();
   });
 });
+
+document.getElementById("testBtn").onclick = async () => {
+  const file = document.getElementById("fileInput").files[0];
+
+  if (!file) {
+    console.log("請先選圖片");
+    return;
+  }
+
+  const url = await testClothAPI(file);
+
+  console.log("去背結果:", url);
+
+  const img = new Image();
+  img.src = url;
+  document.body.appendChild(img);
+};
