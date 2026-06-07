@@ -20,6 +20,9 @@ export function initRenderer() {
    render loop
 ============================== */
 export function render(pose) {
+  if (!video || video.readyState < 2) {
+    debug?.({ camera: "OK", video: "NOT READY", pose: "-", render: "-" });
+  }
   const w = canvas.width || 640;
   const h = canvas.height || 480;
 
