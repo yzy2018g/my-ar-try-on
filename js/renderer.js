@@ -17,24 +17,13 @@ export function initRenderer(c, v) {
     canvas = c;
     video = v;
 
-    if (!canvas) {
-        console.error("❌ canvas is null");
-        return;
-    }
-
-    if (!video) {
-        console.error("❌ video is null");
+    if (!canvas || !video) {
+        console.error("❌ canvas or video is null");
         return;
     }
 
     ctx = canvas.getContext("2d");
 
-    if (!ctx) {
-        console.error("❌ ctx is null");
-        return;
-    }
-
-    // 🔥 強制對齊 video size（非常重要）
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
 
@@ -48,7 +37,7 @@ export function setCloth(img) {
     clothImg = img;
     clothReady = true;
 
-    console.log("🧥 Cloth set");
+    console.log("🧥 Cloth set OK");
 }
 
 /* ===============================
@@ -85,28 +74,36 @@ export function render() {
     const w = canvas.width;
     const h = canvas.height;
 
-    // 🔥 一定要看到這個（確認 loop 活著）
-    console.log("RENDER LOOP ALIVE");
+    // 🔥 永遠畫背景
+    ctx.drawImage(video, 0, 0, w, h);
 
-    // background
-    try {
-        ctx.drawImage(video, 0, 0, w, h);
-    } catch (e) {
-        console.error("video draw error", e);
-    }
-
-    // 🔥 debug 永遠先跑（不要被 return 擋掉）
+    // 🔥 DEBUG（一定要先顯示）
     arDebug();
 
-    // cloth check（修正重點）
-    if (!clothReady) return;
-    if (!clothImg || clothImg.naturalWidth === 0) return;
+    // 🔴 測試點（一定會看到，用來判斷 canvas 是否正常）
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.arc(w / 2, h / 2, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // cloth check（不阻止 debug）
+    if (!clothReady) {
+        console.log("cloth not ready");
+        return;
+    }
+
+    if (!clothImg || clothImg.naturalWidth === 0) {
+        console.log("cloth not loaded");
+        return;
+    }
 
     const x = clothX * w;
     const y = clothY * h;
 
     const cw = clothImg.width * clothScale;
     const ch = clothImg.height * clothScale;
+
+    console.log("DRAW CLOTH", { x, y, clothScale });
 
     ctx.save();
 
@@ -138,7 +135,7 @@ export function startRenderLoop() {
 }
 
 /* ===============================
-   AR DEBUG（一定會顯示）
+   DEBUG PANEL
 ================================ */
 function arDebug() {
     const el = document.getElementById("debugPanel");
@@ -148,8 +145,7 @@ function arDebug() {
 `[AR DEBUG]
 
 CLOTH READY: ${clothReady}
-IMG LOADED: ${clothImg?.complete}
-NATURAL WIDTH: ${clothImg?.naturalWidth}
+IMG WIDTH: ${clothImg?.naturalWidth}
 X: ${clothX.toFixed(3)}
 Y: ${clothY.toFixed(3)}
 SCALE: ${clothScale.toFixed(3)}
