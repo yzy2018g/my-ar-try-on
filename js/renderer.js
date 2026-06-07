@@ -20,17 +20,20 @@ export function initRenderer() {
    render loop
 ============================== */
 export function render(pose) {
-  if (!pose || !clothReady) return;
-
   const w = canvas.width || 640;
   const h = canvas.height || 480;
 
-  // reset
+  // 1. 清畫布（一定要做）
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
-  // background
-  drawVideo(ctx, video, w, h);
+  // 2. 先畫 video（永遠要畫）
+  if (video && video.readyState >= 2) {
+    drawVideo(ctx, video, w, h);
+  }
+
+  // 3. 沒 pose 就只顯示 camera
+  if (!pose) return;
 
   ctx.save();
 
@@ -39,8 +42,10 @@ export function render(pose) {
     ctx.translate(-w, 0);
   }
 
-  // cloth
-  drawCloth(ctx, pose, clothImg, { MIRROR });
+  // 4. cloth 才需要 ready
+  if (clothReady) {
+    drawCloth(ctx, pose, clothImg, { MIRROR });
+  }
 
   ctx.restore();
 }
