@@ -15,7 +15,7 @@
 let canvas;          // 畫布 DOM（延遲取得）
 let ctx;             // canvas 2D context
 let clothImg = new Image(); // 當前衣服圖片
-let currentCloth = "style_1.png";
+let currentCloth = "black-short.png";
 let clothReady = false;
 
 const MIRROR = true; // 是否鏡像（自拍模式）
